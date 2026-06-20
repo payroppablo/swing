@@ -689,42 +689,89 @@ const App = (() => {
     return out;
   }
 
-  function detectCheckpoints(series) {
-    const valid = series.filter(s => s.angle !== null);
-    if (!valid.length) return null;
-    const baseline = valid[0].angle;
-    let topFrame = valid[0], bestDelta = 0;
-    valid.forEach(s => { const d = angleDiff(s.angle, baseline); if (d > bestDelta) { bestDelta = d; topFrame = s; } });
+  const MIN_BACKSWING_TIME = 0.5;
+  const MIN_DOWNSWING_TIME = 0.15;
+  const MAX_DOWNSWING_TIME = 0.6;
 
-    let address = series[0];
-    for (const s of series) {
-      if (s.t >= topFrame.t) break;
-      if (s.angle !== null && s.hipAngle !== null) { address = s; break; }
+  function findAddressFrame(series) {
+    const cutoff = 0.5;
+    for (let i = 0; i < series.length; i++) {
+      const s = series[i];
+      if (s.t > cutoff) break;
+      if (s.angle !== null && s.hipAngle !== null) return s;
     }
+    return series.find(s => s.angle !== null) || series[0];
+  }
 
-    const vel = [null];
-    for (let i = 1; i < series.length; i++)
-      vel.push(wristSpeed(series[i-1].keypoints, series[i].keypoints, series[i].t - series[i-1].t));
-    const smoothVel = smoothVelocity(vel);
+  function findTopFrame(series, address) {
+    if (!address || address.angle === null) return null;
+    const minT = address.t + MIN_BACKSWING_TIME;
+    let best = null, bestDelta = -1;
+    for (const s of series) {
+      if (s.angle === null || s.t < minT) continue;
+      const delta = angleDiff(s.angle, address.angle);
+      if (delta > bestDelta) { bestDelta = delta; best = s; }
+    }
+    return best ? { frame: best, delta: bestDelta } : null;
+  }
 
-    const MIN_DS = 0.15, MAX_DS = 0.6;
-    let impactIdx = -1, peakSpeed = -1;
-    series.forEach((s, i) => {
-      const dt = s.t - topFrame.t;
-      if (dt < MIN_DS || dt > MAX_DS) return;
-      if (smoothVel[i] !== null && smoothVel[i] > peakSpeed) { peakSpeed = smoothVel[i]; impactIdx = i; }
-    });
-    const impact = impactIdx >= 0 ? series[impactIdx] : null;
+  function findImpactFrame(series, address, top) {
+    if (!address || !top) return null;
+    const topDelta = angleDiff(top.frame.angle, address.angle);
+    const targetDelta = topDelta * 0.35;
+    let candidate = null;
+    for (const s of series) {
+      const dt = s.t - top.frame.t;
+      if (dt < MIN_DOWNSWING_TIME) continue;
+      if (dt > MAX_DOWNSWING_TIME) break;
+      if (s.angle === null) continue;
+      if (angleDiff(s.angle, address.angle) <= targetDelta) { candidate = s; break; }
+    }
+    if (!candidate) {
+      let bestDelta = Infinity;
+      for (const s of series) {
+        const dt = s.t - top.frame.t;
+        if (dt < MIN_DOWNSWING_TIME || dt > MAX_DOWNSWING_TIME) continue;
+        if (s.angle === null) continue;
+        const delta = angleDiff(s.angle, address.angle);
+        if (delta < bestDelta) { bestDelta = delta; candidate = s; }
+      }
+    }
+    return candidate;
+  }
 
-    let finishIdx = series.length - 1;
-    if (impactIdx >= 0 && peakSpeed > 0) {
-      const threshold = peakSpeed * 0.3;
-      for (let i = impactIdx + 1; i < series.length; i++) {
-        if (smoothVel[i] !== null && smoothVel[i] < threshold) { finishIdx = i; break; }
+  function findFinishFrame(series, impact) {
+    if (!impact) return series[series.length - 1];
+    const impactIdx = series.indexOf(impact);
+    const STABLE_DELTA = 4;
+    for (let i = impactIdx + 2; i < series.length; i++) {
+      const a = series[i - 1], b = series[i];
+      if (a.angle === null || b.angle === null) continue;
+      if (angleDiff(a.angle, b.angle) < STABLE_DELTA) return b;
+    }
+    return series[series.length - 1];
+  }
+
+  function detectCheckpoints(series) {
+    const usable = series.filter(s => s.angle !== null);
+    if (usable.length < 3) return null;
+
+    const address = findAddressFrame(series);
+    const top = findTopFrame(series, address);
+    if (!top) return null;
+
+    const impact = findImpactFrame(series, address, top);
+    const finish = findFinishFrame(series, impact);
+
+    const order = [address, top.frame, impact, finish].filter(Boolean);
+    for (let i = 1; i < order.length; i++) {
+      if (order[i].t <= order[i - 1].t) {
+        const nextIdx = series.indexOf(order[i - 1]) + 1;
+        if (nextIdx < series.length) order[i] = series[nextIdx];
       }
     }
 
-    return { address, top: topFrame, impact, finish: series[finishIdx] };
+    return { address: order[0], top: order[1], topDelta: top.delta, impact: order[2], finish: order[3] };
   }
 
   /* ── draw skeleton on named-key kp map (for snapshots) ── */
