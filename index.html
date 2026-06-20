@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>SwingLens Golf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:radial-gradient(130% 120% at 50% -10%,#F4F2EC 0%,#E6E2D8 70%,#DAD5C9 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px;font-family:-apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif;user-select:none}
+@media(max-height:960px){body{padding:20px}}
+@media(max-height:920px){body{padding:10px}}
+
+/* ── iOS Device Frame ── */
+.ios-device{width:402px;height:874px;border-radius:48px;overflow:hidden;position:relative;background:#F2F2F7;box-shadow:0 40px 80px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.12);flex-shrink:0}
+.dynamic-island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:126px;height:37px;border-radius:24px;background:#000;z-index:50}
+.status-bar{position:absolute;top:0;left:0;right:0;z-index:45;display:flex;align-items:center;justify-content:space-between;padding:20px 24px 0;pointer-events:none;transition:color .3s}
+.status-time{font-weight:590;font-size:17px;line-height:22px;color:#fff;transition:color .3s}
+.status-time.light{color:#000}
+.status-icons{display:flex;gap:7px;align-items:center}
+.status-icon-fill{fill:#fff;transition:fill .3s}
+.status-icon-fill.light{fill:#000}
+.status-icon-stroke{stroke:#fff;transition:stroke .3s}
+.status-icon-stroke.light{stroke:#000}
+.home-indicator{position:absolute;bottom:0;left:0;right:0;z-index:60;height:34px;display:flex;justify-content:center;align-items:flex-end;padding-bottom:8px;pointer-events:none}
+.home-bar{width:139px;height:5px;border-radius:100px;background:rgba(255,255,255,.7);transition:background .3s}
+.home-bar.light{background:rgba(0,0,0,.25)}
+
+/* ── Screens ── */
+.screens{position:absolute;inset:0;overflow:hidden}
+.screen{position:absolute;top:0;left:0;right:0;bottom:0;overflow-y:auto;overflow-x:hidden;display:none;-webkit-overflow-scrolling:touch}
+.screen.active{display:block}
+
+/* ── Animations ── */
+@keyframes screenIn{from{transform:translateY(12px);opacity:.85}to{transform:translateY(0);opacity:1}}
+@keyframes scanMove{from{top:5%}to{top:90%}}
+@keyframes ringfill{from{stroke-dashoffset:var(--circ)}to{stroke-dashoffset:var(--off)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes recBlink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Tap feedback ── */
+.tap{cursor:pointer;transition:transform .12s,opacity .12s}
+.tap:active{transform:scale(.97);opacity:.88}
+
+/* ── Angle Toggle (Upload) ── */
+.angle-toggle{display:flex;background:#ECEAE3;border-radius:12px;padding:4px;gap:4px;margin-top:16px}
+.angle-btn{flex:1;padding:9px 8px;border-radius:9px;font-size:12.5px;font-weight:600;text-align:center;cursor:pointer;color:#6B756F;transition:all .2s}
+.angle-btn.active{background:#fff;color:#1B4332;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+
+/* ── Camera preview overlay ── */
+#camera-preview{position:absolute;inset:0;object-fit:cover;width:100%;height:100%;border-radius:22px;display:none}
+#camera-stop-btn{display:none;position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:#FF3B30;color:#fff;border:none;border-radius:99px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;z-index:10}
+
+/* ── Analysis video+canvas ── */
+.analysis-reticle{position:relative;align-self:center;width:296px;height:296px;border-radius:24px;overflow:hidden;background:repeating-linear-gradient(45deg,rgba(255,255,255,.04) 0 11px,rgba(255,255,255,.075) 11px 22px);box-shadow:0 0 0 1px rgba(127,208,138,.25),0 24px 50px rgba(0,0,0,.35)}
+#analysis-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.85}
+#skeleton-canvas{position:absolute;inset:0;width:100%;height:100%}
+</style>
+</head>
+<body>
+
+<input type="file" id="video-file-input" accept="video/*" style="display:none">
+<video id="proc-video" style="display:none" playsinline muted crossorigin="anonymous"></video>
+
+<div class="ios-device">
+  <div class="dynamic-island"></div>
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="status-time" id="status-time">9:41</div>
+    <div class="status-icons">
+      <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx=".7" class="status-icon-fill"/><rect x="4.8" y="5" width="3.2" height="7" rx=".7" class="status-icon-fill"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx=".7" class="status-icon-fill"/><rect x="14.4" y="0" width="3.2" height="12" rx=".7" class="status-icon-fill"/></svg>
+      <svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" class="status-icon-fill"/><path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" class="status-icon-fill"/><circle cx="8.5" cy="10.5" r="1.5" class="status-icon-fill"/></svg>
+      <svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="white" stroke-opacity=".35" class="status-icon-stroke" id="bat-border"/><rect x="2" y="2" width="20" height="9" rx="2" class="status-icon-fill"/><path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" class="status-icon-fill" opacity=".4"/></svg>
+    </div>
+  </div>
+
+  <div class="screens">
+
+    <!-- ════════ HOME ════════ -->
+    <div id="screen-home" class="screen active">
+      <div style="position:relative;width:100%;min-height:100%;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box;padding:78px 22px 36px;background:radial-gradient(125% 80% at 50% -8%,#2F6149 0%,#1B4332 42%,#0F2A21 100%);overflow:hidden;animation:screenIn .5s ease both">
+        <div style="position:absolute;inset:0;background:repeating-linear-gradient(116deg,rgba(255,255,255,.035) 0 30px,rgba(0,0,0,.05) 30px 60px);opacity:.5;pointer-events:none"></div>
+        <div style="position:absolute;top:-16%;left:50%;transform:translateX(-50%);width:150%;height:58%;background:radial-gradient(closest-side,rgba(150,214,152,.2),transparent 72%);filter:blur(8px);pointer-events:none"></div>
+        <div style="position:absolute;inset:0;background:radial-gradient(120% 100% at 50% 52%,transparent 54%,rgba(0,0,0,.4));pointer-events:none"></div>
+
+        <!-- Top bar -->
+        <div style="position:relative;display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:40px;height:40px;border-radius:50%;border:1px solid rgba(196,224,200,.5);display:flex;align-items:center;justify-content:center;font-family:'Spectral',Georgia,serif;font-size:16px;font-weight:600;color:#EBF3EC;letter-spacing:.5px">SL</div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <div style="font-size:9.5px;letter-spacing:2.5px;color:rgba(214,228,216,.6);text-transform:uppercase">Welcome back</div>
+              <div style="font-size:13.5px;font-weight:600;color:#EAF3EB">Pablo</div>
+            </div>
+          </div>
+          <div class="tap" style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" stroke="#CFE3D2" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1M18.7 18.7l-2.1-2.1M7.4 7.4L5.3 5.3" stroke="#CFE3D2" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </div>
+        </div>
+
+        <!-- Hero: wordmark + caddie -->
+        <div style="position:relative">
+          <div style="font-size:44px;font-weight:800;letter-spacing:-1.8px;line-height:.95;color:#FBFCFB">Swing<span style="color:#7FD08A">Lens</span></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:9px">
+            <div style="height:1px;width:26px;background:rgba(167,224,174,.55)"></div>
+            <div style="font-size:12px;font-weight:700;letter-spacing:6px;color:#A7E0AE;text-transform:uppercase">Golf</div>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:11px;margin-top:26px">
+            <div style="flex-shrink:0">
+              <svg width="70" height="82" viewBox="0 0 80 92" fill="none">
+                <ellipse cx="40" cy="88" rx="22" ry="4" fill="rgba(0,0,0,.22)"/>
+                <circle cx="40" cy="54" r="31" fill="#FBFCFB"/>
+                <circle cx="40" cy="54" r="31" stroke="rgba(0,0,0,.06)" stroke-width="1"/>
+                <circle cx="27" cy="63" r="1.9" fill="#E6EAE3"/><circle cx="40" cy="69" r="1.9" fill="#E6EAE3"/><circle cx="53" cy="63" r="1.9" fill="#E6EAE3"/>
+                <circle cx="24" cy="52" r="1.9" fill="#E6EAE3"/><circle cx="56" cy="52" r="1.9" fill="#E6EAE3"/>
+                <circle cx="33" cy="52" r="3.6" fill="#16201B"/><circle cx="47" cy="52" r="3.6" fill="#16201B"/>
+                <circle cx="34.2" cy="50.7" r="1" fill="#fff"/><circle cx="48.2" cy="50.7" r="1" fill="#fff"/>
+                <path d="M32 61 Q40 68 48 61" stroke="#16201B" stroke-width="2.4" stroke-linecap="round"/>
+                <path d="M13 33 Q40 5 67 33 Z" fill="#1B4332"/>
+                <path d="M59 33 Q81 29 83 38 Q70 40 56 37 Z" fill="#14342B"/>
+                <circle cx="40" cy="11" r="4.2" fill="#4CAF50"/>
+                <path d="M14 33 Q40 27 66 33" stroke="#4CAF50" stroke-width="2.5"/>
+              </svg>
+            </div>
+            <div style="flex:1;position:relative;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.14);border-radius:16px 16px 16px 4px;padding:13px 15px;backdrop-filter:blur(8px)">
+              <div style="font-size:10px;letter-spacing:1.5px;color:#7FD08A;text-transform:uppercase;font-weight:700;margin-bottom:5px">Birdie · your caddie</div>
+              <div style="font-family:'Spectral',Georgia,serif;font-style:italic;font-size:15px;color:#EAF3EB;line-height:1.4">"Ready when you are — send me a swing and I'll read every detail."</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Menu -->
+        <div style="position:relative;display:flex;flex-direction:column;gap:10px">
+          <div onclick="App.goUpload()" class="tap" style="display:flex;align-items:center;gap:14px;padding:15px 16px;border-radius:18px;background:#4CAF50;box-shadow:0 10px 26px rgba(76,175,80,.32)">
+            <div style="width:42px;height:42px;border-radius:12px;background:rgba(8,49,28,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="#08311C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V16" stroke="#08311C" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:16px;font-weight:700;color:#08311C">Upload Swing</div>
+              <div style="font-size:12px;color:rgba(8,49,28,.62);margin-top:1px">Record or pick from gallery</div>
+            </div>
+            <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5l6 6-6 6" stroke="#08311C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div onclick="App.goResults()" class="tap" style="display:flex;align-items:center;gap:14px;padding:15px 16px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(8px)">
+            <div style="width:42px;height:42px;border-radius:12px;background:rgba(127,208,138,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="#7FD08A" stroke-width="1.8"/><path d="M12 7.5V12l3 2" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:15.5px;font-weight:600;color:#EAF3EB">Previous Swings</div>
+              <div style="font-size:12px;color:rgba(206,226,209,.6);margin-top:1px">Review your past reports</div>
+            </div>
+            <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5l6 6-6 6" stroke="rgba(206,226,209,.55)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div onclick="App.goResults()" class="tap" style="display:flex;align-items:center;gap:14px;padding:15px 16px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(8px)">
+            <div style="width:42px;height:42px;border-radius:12px;background:rgba(127,208,138,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 3v18" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round"/><path d="M6.5 4h11l-2.6 3.5L17.5 11h-11" stroke="#7FD08A" stroke-width="1.8" stroke-linejoin="round" fill="none"/></svg>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:15.5px;font-weight:600;color:#EAF3EB">Drills &amp; Tips</div>
+              <div style="font-size:12px;color:rgba(206,226,209,.6);margin-top:1px">Coaching picked by Birdie</div>
+            </div>
+            <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5l6 6-6 6" stroke="rgba(206,226,209,.55)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div style="text-align:center;font-size:12px;color:rgba(214,228,216,.58);margin-top:8px;letter-spacing:.2px">3 free analyses on your account</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ UPLOAD ════════ -->
+    <div id="screen-upload" class="screen">
+      <div style="position:relative;width:100%;min-height:100%;display:flex;flex-direction:column;box-sizing:border-box;padding:84px 24px 40px;background:#FBFBF8;animation:screenIn .45s ease both">
+        <div onclick="App.goHome()" class="tap" style="position:absolute;top:74px;left:20px;width:38px;height:38px;border-radius:50%;background:#fff;border:1px solid #ECEAE3;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.04)">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#1B4332" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="margin-top:6px">
+          <div style="font-size:11px;letter-spacing:3px;color:#4CAF50;text-transform:uppercase;font-weight:600">Step 1 of 2</div>
+          <div style="font-family:'Spectral',Georgia,serif;font-size:34px;font-weight:600;color:#16201B;letter-spacing:-.5px;margin-top:8px;line-height:1.05">Upload your swing</div>
+          <div style="font-size:14.5px;color:#6B756F;margin-top:8px;line-height:1.5;max-width:300px">Film from behind or face-on. A single clean rep is all we need.</div>
+
+          <!-- Angle toggle -->
+          <div class="angle-toggle" id="angle-toggle">
+            <div class="angle-btn active" data-angle="dtl" onclick="App.setAngle('dtl')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M5 19L19 5M19 5H11M19 5V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Down-the-line
+            </div>
+            <div class="angle-btn" data-angle="fo" onclick="App.setAngle('fo')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="display:inline;vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+              Face-on
+            </div>
+          </div>
+        </div>
+
+        <!-- Dropzone -->
+        <div id="dropzone" onclick="document.getElementById('video-file-input').click()" class="tap" style="margin-top:26px;border:1.5px dashed #C3CEC6;border-radius:22px;background:repeating-linear-gradient(45deg,#F1F2EC 0 11px,#F7F8F2 11px 22px);height:196px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;cursor:pointer;position:relative;overflow:hidden">
+          <div style="width:60px;height:60px;border-radius:50%;background:#fff;border:1px solid #E4E7E0;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.05)">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="#1B4332" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V16" stroke="#1B4332" stroke-width="1.9" stroke-linecap="round"/></svg>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:15px;font-weight:600;color:#1B4332">Tap to browse files</div>
+            <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.3px">mp4 · mov · up to 30s</div>
+          </div>
+          <!-- Camera preview (hidden initially) -->
+          <video id="camera-preview" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:22px" playsinline muted></video>
+        </div>
+
+        <!-- Camera stop btn (shown during recording) -->
+        <div id="cam-stop-wrap" style="display:none;margin-top:10px;text-align:center">
+          <div onclick="App.stopRecording()" class="tap" style="display:inline-flex;align-items:center;gap:8px;background:#FF3B30;color:#fff;border-radius:99px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer">
+            <span style="width:10px;height:10px;border-radius:50%;background:#fff;animation:recBlink 1s infinite;display:inline-block"></span>
+            Stop Recording
+          </div>
+        </div>
+
+        <!-- Buttons -->
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:auto;padding-top:20px">
+          <div id="record-btn" onclick="App.startRecording()" class="tap" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:17px;border-radius:15px;background:#4CAF50;color:#08311C;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 8px 22px rgba(76,175,80,.3)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="6.5" width="13.5" height="11" rx="3" stroke="#08311C" stroke-width="1.9"/><path d="M16 10.5l5-2.5v8l-5-2.5" stroke="#08311C" stroke-width="1.9" stroke-linejoin="round" fill="none"/></svg>
+            Record Swing
+          </div>
+          <div onclick="document.getElementById('video-file-input').click()" class="tap" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:17px;border-radius:15px;background:#fff;border:1.5px solid #D9DDD4;color:#1B4332;font-size:16px;font-weight:600;cursor:pointer">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="15" rx="3" stroke="#1B4332" stroke-width="1.8"/><circle cx="8.5" cy="9.5" r="1.7" fill="#1B4332"/><path d="M4 16.5l4.5-3.5 3.5 2.6 3-2 4 3" stroke="#1B4332" stroke-width="1.8" stroke-linejoin="round" fill="none"/></svg>
+            Choose from Gallery
+          </div>
+          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.2px">Best results: 120fps · steady camera</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ ANALYSIS ════════ -->
+    <div id="screen-analysis" class="screen">
+      <div style="position:relative;width:100%;min-height:100%;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box;padding:92px 30px 48px;background:radial-gradient(120% 90% at 50% 30%,#214d3a 0%,#15362a 55%,#0D241C 100%);overflow:hidden;animation:screenIn .45s ease both">
+        <div style="position:relative;text-align:center">
+          <div style="font-size:11px;letter-spacing:4px;color:#7FD08A;text-transform:uppercase;font-weight:600">Analyzing</div>
+        </div>
+
+        <!-- Reticle with video + canvas -->
+        <div class="analysis-reticle" id="analysis-reticle">
+          <video id="analysis-video" playsinline muted style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.85"></video>
+          <canvas id="skeleton-canvas" style="display:none;position:absolute;inset:0;width:296px;height:296px"></canvas>
+          <!-- Grid overlay -->
+          <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(127,208,138,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(127,208,138,.06) 1px,transparent 1px);background-size:37px 37px;pointer-events:none"></div>
+          <!-- Corner brackets -->
+          <div style="position:absolute;top:14px;left:14px;width:26px;height:26px;border-top:2px solid #7FD08A;border-left:2px solid #7FD08A;border-radius:4px 0 0 0;pointer-events:none"></div>
+          <div style="position:absolute;top:14px;right:14px;width:26px;height:26px;border-top:2px solid #7FD08A;border-right:2px solid #7FD08A;border-radius:0 4px 0 0;pointer-events:none"></div>
+          <div style="position:absolute;bottom:14px;left:14px;width:26px;height:26px;border-bottom:2px solid #7FD08A;border-left:2px solid #7FD08A;border-radius:0 0 0 4px;pointer-events:none"></div>
+          <div style="position:absolute;bottom:14px;right:14px;width:26px;height:26px;border-bottom:2px solid #7FD08A;border-right:2px solid #7FD08A;border-radius:0 0 4px 0;pointer-events:none"></div>
+          <!-- Scan line (shown when no video) -->
+          <div id="scan-line" style="position:absolute;left:6%;right:6%;height:2px;background:linear-gradient(90deg,transparent,#5FE06E,transparent);box-shadow:0 0 18px 3px rgba(95,224,110,.55);top:5%;animation:scanMove 1.9s ease-in-out infinite alternate;pointer-events:none"></div>
+          <div style="position:absolute;bottom:12px;left:16px;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:10.5px;letter-spacing:.4px;color:rgba(220,238,222,.5);pointer-events:none" id="angle-label">swing video · tracking</div>
+        </div>
+
+        <!-- Progress block -->
+        <div style="position:relative">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:20px;height:20px;border:2.5px solid rgba(127,208,138,.25);border-top-color:#5FE06E;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>
+            <div style="font-family:'Spectral',Georgia,serif;font-size:23px;font-weight:600;color:#F4FAF5">Analyzing swing…</div>
+          </div>
+          <div id="status-text" style="font-size:13.5px;color:rgba(206,226,209,.78);margin-top:10px;min-height:18px">Detecting posture &amp; spine angle</div>
+          <div style="margin-top:16px;height:6px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden">
+            <div id="progress-bar-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#4CAF50,#7FD08A);border-radius:99px;transition:width .25s ease;box-shadow:0 0 12px rgba(95,224,110,.5)"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+            <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:12px;color:#7FD08A"><span id="progress-num">0</span>%</div>
+            <div style="font-size:11px;letter-spacing:2px;color:rgba(190,212,194,.6);text-transform:uppercase">Tour-grade model</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ RESULTS ════════ -->
+    <div id="screen-results" class="screen">
+      <div id="results-content" style="position:relative;width:100%;min-height:100%;box-sizing:border-box;padding:80px 20px 40px;background:#FBFBF8;animation:screenIn .5s ease both">
+        <!-- dynamically rendered -->
+      </div>
+    </div>
+
+  </div><!-- /screens -->
+
+  <div class="home-indicator"><div class="home-bar" id="home-bar"></div></div>
+</div><!-- /ios-device -->
+
+<!-- TensorFlow.js + Pose Detection -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+
+<script>
+const App = (() => {
+  /* ── state ── */
+  let screen = 'home';
+  let swingAngle = 'dtl';
+  let uploadedVideo = null;
+  let cameraStream = null;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let poseDetector = null;
+  let analysisResults = null;
+  let analysisAbort = false;
+
+  const DEFAULT = {
+    score:78, headStability:62, hipRotation:71, followThrough:68,
+    tempo:88, setup:84, tempoRatio:'3.0:1', hipDeg:31, headMovCm:4.0
+  };
+
+  /* ── navigation ── */
+  function showScreen(name) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('screen-' + name).classList.add('active');
+    const dark = name === 'home' || name === 'analysis';
+    document.getElementById('status-time').classList.toggle('light', !dark);
+    document.querySelectorAll('.status-icon-fill').forEach(el => el.classList.toggle('light', !dark));
+    document.querySelectorAll('.status-icon-stroke').forEach(el => el.classList.toggle('light', !dark));
+    document.getElementById('home-bar').classList.toggle('light', !dark);
+    screen = name;
+  }
+
+  function goHome() { analysisAbort = true; showScreen('home'); }
+  function goUpload() { showScreen('upload'); }
+  function goResults() {
+    renderResults(analysisResults || DEFAULT);
+    showScreen('results');
+  }
+
+  /* ── clock ── */
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('status-time').textContent =
+      now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0');
+  }
+
+  /* ── angle toggle ── */
+  function setAngle(angle) {
+    swingAngle = angle;
+    document.querySelectorAll('.angle-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.angle === angle));
+    document.getElementById('angle-label').textContent =
+      angle === 'dtl' ? 'down-the-line · tracking' : 'face-on · tracking';
+  }
+
+  /* ── file input ── */
+  function handleFile(file) {
+    if (!file || !file.type.startsWith('video/')) return;
+    uploadedVideo = file;
+    const dz = document.getElementById('dropzone');
+    dz.innerHTML = `
+      <div style="width:56px;height:56px;border-radius:50%;background:#EAF6EC;border:1px solid #B8DFC0;display:flex;align-items:center;justify-content:center">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#3E8F58" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:15px;font-weight:600;color:#1B4332">Video ready</div>
+        <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px">${file.name ? file.name.slice(0,28) : 'recorded clip'}</div>
+      </div>`;
+    dz.onclick = null;
+  }
+
+  /* ── camera recording ── */
+  async function startRecording() {
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      });
+      const preview = document.getElementById('camera-preview');
+      preview.srcObject = cameraStream;
+      preview.style.display = 'block';
+      await preview.play();
+
+      recordedChunks = [];
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9' : 'video/webm';
+      mediaRecorder = new MediaRecorder(cameraStream, { mimeType });
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: mimeType });
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+        preview.style.display = 'none';
+        preview.srcObject = null;
+        document.getElementById('cam-stop-wrap').style.display = 'none';
+        document.getElementById('record-btn').style.display = 'flex';
+        uploadedVideo = blob;
+        handleFile({ name: 'recorded-swing.webm', type: 'video/webm' });
+        beginAnalysis();
+      };
+      mediaRecorder.start();
+      document.getElementById('record-btn').style.display = 'none';
+      document.getElementById('cam-stop-wrap').style.display = 'block';
+    } catch(e) {
+      alert('Camera access denied. Please upload a video file instead.');
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  }
+
+  /* ── start analysis (from buttons) ── */
+  function startAnalysis() {
+    if (!uploadedVideo) {
+      // demo mode: no video
+      beginAnalysis();
+      return;
+    }
+    beginAnalysis();
+  }
+
+  function beginAnalysis() {
+    analysisAbort = false;
+    showScreen('analysis');
+
+    const progressBar = document.getElementById('progress-bar-fill');
+    const progressNum = document.getElementById('progress-num');
+    const statusText  = document.getElementById('status-text');
+    const scanLine    = document.getElementById('scan-line');
+
+    progressBar.style.width = '0%';
+    progressNum.textContent = '0';
+
+    if (uploadedVideo) {
+      const url = URL.createObjectURL(uploadedVideo);
+      const vid = document.getElementById('analysis-video');
+      vid.src = url;
+      vid.style.display = 'block';
+      vid.play().catch(()=>{});
+      scanLine.style.display = 'none';
+      document.getElementById('skeleton-canvas').style.display = 'block';
+
+      const procVid = document.getElementById('proc-video');
+      procVid.src = url;
+
+      runMoveNet(procVid, (pct, msg) => {
+        if (analysisAbort) return;
+        progressBar.style.width = pct + '%';
+        progressNum.textContent = pct;
+        if (msg) statusText.textContent = msg;
+      }).then(results => {
+        if (analysisAbort) return;
+        analysisResults = results;
+        setTimeout(goResults, 400);
+      }).catch(() => {
+        if (analysisAbort) return;
+        runSimulated(progressBar, progressNum, statusText);
+      });
+    } else {
+      runSimulated(progressBar, progressNum, statusText);
+    }
+  }
+
+  /* ── simulated fallback ── */
+  function runSimulated(progressBar, progressNum, statusText) {
+    const statuses = [
+      'Detecting posture & spine angle',
+      'Tracking club path & face angle',
+      'Measuring tempo & balance',
+      'Comparing against tour pros',
+      'Finalizing your report',
+    ];
+    let p = 0;
+    const t = setInterval(() => {
+      if (analysisAbort) { clearInterval(t); return; }
+      p += 2;
+      const idx = p < 22 ? 0 : p < 44 ? 1 : p < 66 ? 2 : p < 86 ? 3 : 4;
+      progressBar.style.width = p + '%';
+      progressNum.textContent = p;
+      statusText.textContent = statuses[idx];
+      if (p >= 100) {
+        clearInterval(t);
+        analysisResults = null;
+        setTimeout(goResults, 380);
+      }
+    }, 55);
+  }
+
+  /* ── MoveNet ── */
+  async function loadDetector() {
+    if (poseDetector) return poseDetector;
+    await tf.ready();
+    poseDetector = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+    );
+    return poseDetector;
+  }
+
+  async function runMoveNet(video, onProgress) {
+    const det = await loadDetector();
+
+    await new Promise((res, rej) => {
+      video.onloadedmetadata = res;
+      video.onerror = rej;
+      video.load();
+    });
+
+    const duration = video.duration;
+    if (!duration || isNaN(duration)) throw new Error('no duration');
+
+    const canvas = document.getElementById('skeleton-canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width  = video.videoWidth  || 296;
+    canvas.height = video.videoHeight || 296;
+
+    const statuses = [
+      'Detecting posture & spine angle',
+      'Tracking club path & face angle',
+      'Measuring tempo & balance',
+      'Comparing against tour pros',
+      'Finalizing your report',
+    ];
+
+    const interval = 0.2; // seconds between samples
+    const total = Math.floor(duration / interval);
+    const allPoses = [];
+
+    for (let i = 0; i <= total; i++) {
+      if (analysisAbort) throw new Error('aborted');
+      video.currentTime = i * interval;
+      await new Promise(res => { video.onseeked = res; setTimeout(res, 500); });
+
+      try {
+        const poses = await det.estimatePoses(video);
+        if (poses && poses[0]) {
+          allPoses.push(poses[0]);
+          drawPose(ctx, poses[0], canvas.width, canvas.height,
+            video.videoWidth || canvas.width, video.videoHeight || canvas.height);
+        }
+      } catch(_) {}
+
+      const pct = Math.min(95, Math.round((i / total) * 90) + 3);
+      const sidx = pct < 20 ? 0 : pct < 40 ? 1 : pct < 60 ? 2 : pct < 80 ? 3 : 4;
+      onProgress(pct, statuses[sidx]);
+    }
+
+    onProgress(100, 'Finalizing your report');
+    return calcMetrics(allPoses, video.videoWidth || 296, video.videoHeight || 296);
+  }
+
+  /* ── draw skeleton ── */
+  function drawPose(ctx, pose, cw, ch, vw, vh) {
+    const sx = cw / vw, sy = ch / vh;
+    const kps = pose.keypoints;
+    const CONNECTIONS = [
+      [5,6],[5,7],[7,9],[6,8],[8,10],
+      [5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]
+    ];
+
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.shadowColor = 'rgba(95,224,110,.6)';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = '#5FE06E';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+
+    for (const [a,b] of CONNECTIONS) {
+      const ka = kps[a], kb = kps[b];
+      if (ka && kb && ka.score > 0.25 && kb.score > 0.25) {
+        ctx.beginPath();
+        ctx.moveTo(ka.x * sx, ka.y * sy);
+        ctx.lineTo(kb.x * sx, kb.y * sy);
+        ctx.stroke();
+      }
+    }
+
+    ctx.shadowBlur = 0;
+    for (const kp of kps) {
+      if (kp.score > 0.25) {
+        ctx.beginPath();
+        ctx.arc(kp.x * sx, kp.y * sy, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = kp.score > 0.6 ? '#7FD08A' : 'rgba(127,208,138,.6)';
+        ctx.fill();
+      }
+    }
+  }
+
+  /* ── metric calculation ── */
+  function calcMetrics(poses, vw, vh) {
+    if (!poses.length) return DEFAULT;
+
+    // head stability: nose x std-dev
+    const noses = poses.map(p => p.keypoints.find(k => k.name==='nose')).filter(k=>k&&k.score>.25);
+    let headScore = 70, headMovCm = 3.0;
+    if (noses.length > 3) {
+      const xs = noses.map(k => k.x / vw);
+      const mx = xs.reduce((a,b)=>a+b,0)/xs.length;
+      const sd = Math.sqrt(xs.reduce((a,b)=>a+(b-mx)**2,0)/xs.length);
+      headScore = Math.round(Math.max(20, Math.min(95, 100 - sd * 380)));
+      headMovCm = Math.round(sd * vw * 0.075 * 10) / 10;
+    }
+
+    // hip rotation: max angle of hip line
+    let hipScore = 65, hipDeg = 28;
+    if (swingAngle === 'fo') {
+      const angles = poses.map(p => {
+        const lh = p.keypoints.find(k=>k.name==='left_hip');
+        const rh = p.keypoints.find(k=>k.name==='right_hip');
+        return (lh&&rh&&lh.score>.25&&rh.score>.25)
+          ? Math.abs(Math.atan2(rh.y-lh.y, rh.x-lh.x)*180/Math.PI) : null;
+      }).filter(a=>a!==null);
+      if (angles.length > 2) {
+        hipDeg = Math.round(Math.max(...angles));
+        hipScore = Math.round(Math.min(95, hipDeg * 2.1));
+      }
+    } else {
+      // DTL: use lateral hip displacement
+      const hipXs = poses.map(p => {
+        const lh = p.keypoints.find(k=>k.name==='left_hip');
+        const rh = p.keypoints.find(k=>k.name==='right_hip');
+        return (lh&&rh&&lh.score>.2&&rh.score>.2) ? (lh.x+rh.x)/2/vw : null;
+      }).filter(x=>x!==null);
+      if (hipXs.length > 3) {
+        const mx2 = hipXs.reduce((a,b)=>a+b,0)/hipXs.length;
+        const sd2 = Math.sqrt(hipXs.reduce((a,b)=>a+(b-mx2)**2,0)/hipXs.length);
+        hipDeg = Math.round(sd2 * 600);
+        hipScore = Math.round(Math.max(30, Math.min(90, sd2 * 1200)));
+      }
+    }
+
+    // tempo: wrist height peak
+    const wristH = poses.map(p => {
+      const lw = p.keypoints.find(k=>k.name==='left_wrist');
+      const rw = p.keypoints.find(k=>k.name==='right_wrist');
+      return (lw&&rw&&lw.score>.2&&rw.score>.2) ? Math.min(lw.y, rw.y) : null;
+    }).filter(h=>h!==null);
+    let tempoScore = 78, tempoRatio = '3.1:1';
+    if (wristH.length > 4) {
+      const peakIdx = wristH.indexOf(Math.min(...wristH));
+      const ratio = peakIdx / Math.max(1, wristH.length - peakIdx);
+      const diff = Math.abs(ratio - 3.0);
+      tempoScore = Math.round(Math.max(40, Math.min(95, 100 - diff * 22)));
+      tempoRatio = ratio.toFixed(1) + ':1';
+    }
+
+    // follow-through: wrist variance in last 25%
+    const last = poses.slice(Math.floor(poses.length * .75));
+    let ftScore = 68;
+    if (last.length > 2) {
+      const fxs = last.map(p => {
+        const lw = p.keypoints.find(k=>k.name==='left_wrist');
+        return (lw&&lw.score>.2) ? lw.x/vw : null;
+      }).filter(x=>x!==null);
+      if (fxs.length > 1) {
+        const fm = fxs.reduce((a,b)=>a+b,0)/fxs.length;
+        const fsd = Math.sqrt(fxs.reduce((a,b)=>a+(b-fm)**2,0)/fxs.length);
+        ftScore = Math.round(Math.max(40, Math.min(92, 100 - fsd * 280)));
+      }
+    }
+
+    // setup: shoulder symmetry in first 25%
+    const first = poses.slice(0, Math.ceil(poses.length * .25));
+    let setupScore = 82;
+    if (first.length > 1) {
+      const diffs = first.map(p => {
+        const ls = p.keypoints.find(k=>k.name==='left_shoulder');
+        const rs = p.keypoints.find(k=>k.name==='right_shoulder');
+        return (ls&&rs&&ls.score>.25&&rs.score>.25) ? Math.abs(ls.y-rs.y)/vh : null;
+      }).filter(d=>d!==null);
+      if (diffs.length) {
+        const avgDiff = diffs.reduce((a,b)=>a+b,0)/diffs.length;
+        setupScore = Math.round(Math.max(50, Math.min(95, 100 - avgDiff * 300)));
+      }
+    }
+
+    const score = Math.round(headScore*.25 + hipScore*.25 + tempoScore*.25 + ftScore*.15 + setupScore*.10);
+    return { score, headStability:headScore, hipRotation:hipScore, followThrough:ftScore,
+             tempo:tempoScore, setup:setupScore, tempoRatio, hipDeg, headMovCm };
+  }
+
+  /* ── results rendering ── */
+  function renderResults(r) {
+    const C = 2 * Math.PI * 70;
+    const off = C * (1 - r.score / 100);
+    const verdict =
+      r.score >= 85 ? 'Excellent — tour-level fundamentals.' :
+      r.score >= 70 ? 'Solid — with clear gains ahead.' :
+      r.score >= 50 ? 'Developing — focus on the basics.' :
+                      'Needs work — start with your setup.';
+
+    document.getElementById('results-content').innerHTML = buildResultsHTML(r, C, off, verdict);
+  }
+
+  function buildResultsHTML(r, C, off, verdict) {
+    const hipc = r.hipDeg >= 38 ? '#3E8F58' : '#C2843B';
+    const hipBarW = Math.round(Math.min(100, r.hipDeg / 45 * 100));
+    const headBar = Math.round(Math.max(0, (1 - (r.headMovCm - 1.2) / 5) * 88));
+    const tempoBarW = Math.round(Math.min(100, r.tempo));
+    const proLabel = swingAngle === 'dtl' ? 'down-the-line' : 'face-on';
+
+    const insightCard = (bg, borderCol, iconHtml, title, desc, badge, badgeColor, scoreNum, scoreLabel) => `
+      <div style="display:flex;gap:14px;align-items:flex-start;background:#fff;border:1px solid ${borderCol};border-radius:18px;padding:15px">
+        <div style="width:44px;height:44px;border-radius:13px;background:${bg};display:flex;align-items:center;justify-content:center;flex-shrink:0">${iconHtml}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:15px;font-weight:600;color:#16201B">${title}</div>
+          <div style="font-size:13px;color:#6B756F;margin-top:3px;line-height:1.45">${desc}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+            <span style="width:7px;height:7px;border-radius:50%;background:${badgeColor}"></span>
+            <span style="font-size:11.5px;font-weight:600;color:${badgeColor};letter-spacing:.3px">${badge}</span>
+          </div>
+        </div>
+        <div style="text-align:center;flex-shrink:0">
+          <div style="font-family:'Spectral',Georgia,serif;font-size:22px;font-weight:600;color:${bg==='#EAF6EC'?'#3E8F58':'#1B4332'}">${scoreNum}</div>
+          <div style="font-size:9px;letter-spacing:1px;color:#B3BBB4;text-transform:uppercase">${scoreLabel}</div>
+        </div>
+      </div>`;
+
+    return `
+      <!-- header -->
+      <div style="display:flex;align-items:center;gap:12px;padding:0 4px">
+        <div onclick="App.goHome()" class="tap" style="width:38px;height:38px;border-radius:50%;background:#fff;border:1px solid #ECEAE3;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#1B4332" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="font-size:11px;letter-spacing:3px;color:#4CAF50;text-transform:uppercase;font-weight:600">Swing Report</div>
+      </div>
+
+      <!-- score hero -->
+      <div style="display:flex;flex-direction:column;align-items:center;margin-top:18px">
+        <div style="position:relative;width:172px;height:172px">
+          <svg width="172" height="172" viewBox="0 0 172 172">
+            <circle cx="86" cy="86" r="70" fill="none" stroke="#EAEDE5" stroke-width="13"/>
+            <circle id="score-ring" cx="86" cy="86" r="70" fill="none" stroke="#4CAF50" stroke-width="13" stroke-linecap="round" transform="rotate(-90 86 86)"
+              style="stroke-dasharray:${C.toFixed(2)};--circ:${C.toFixed(2)};--off:${off.toFixed(2)};animation:ringfill 1.3s cubic-bezier(.2,.7,.2,1) .25s both"/>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+            <div style="font-family:'Spectral',Georgia,serif;font-size:56px;font-weight:600;color:#16201B;line-height:1">${r.score}</div>
+            <div style="font-size:10.5px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;margin-top:2px">Swing Score</div>
+          </div>
+        </div>
+        <div style="font-family:'Spectral',Georgia,serif;font-style:italic;font-size:16.5px;color:#3C463F;margin-top:14px;text-align:center;max-width:280px;line-height:1.4">${verdict}</div>
+      </div>
+
+      <!-- insights -->
+      <div style="margin-top:28px;display:flex;flex-direction:column;gap:11px">
+        <div style="font-size:11px;letter-spacing:2.5px;color:#3E8F58;text-transform:uppercase;font-weight:600;padding-left:4px">What you're doing well</div>
+        ${r.tempo >= 72 ? insightCard('#EAF6EC','#E1EDE4',
+          '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#3E8F58" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+          'Smooth, repeatable tempo',
+          `Your ${r.tempoRatio} backswing-to-downswing ratio is tour-standard.`,
+          'Strength','#3E8F58', r.tempo, 'tempo') : ''}
+        ${r.setup >= 72 ? insightCard('#EAF6EC','#E1EDE4',
+          '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#3E8F58" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+          'Solid setup &amp; alignment',
+          'Posture and aim at address are right on plane.',
+          'Strength','#3E8F58', r.setup, 'setup') : ''}
+
+        <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600;padding-left:4px;margin-top:10px">Focus areas</div>
+        ${insightCard('#1B4332','#ECEAE3',
+          '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7" stroke="#7FD08A" stroke-width="1.8"/><circle cx="12" cy="12" r="1.8" fill="#7FD08A"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round"/></svg>',
+          'Head stability needs improvement',
+          `Your head drifts ~${r.headMovCm} cm toward the target through impact.`,
+          r.headStability < 60 ? 'Priority' : 'Moderate',
+          '#C2843B', r.headStability, 'stab.')}
+        ${insightCard('#1B4332','#ECEAE3',
+          '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M19 12a7 7 0 1 1-2.05-4.95" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round"/><path d="M19 4v4.2h-4.2" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+          'Hip rotation is delayed',
+          'Hips open ~0.1s late, leaking power and lag at impact.',
+          'Moderate','#C2843B', r.hipRotation, 'rot.')}
+        ${insightCard('#1B4332','#ECEAE3',
+          '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 17c5.5 2 13-.5 16.5-9.5" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round"/><path d="M19.5 4l1.6 4.1-4.2.6" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+          'Follow-through is inconsistent',
+          'Finish position varies noticeably rep to rep.',
+          'Minor','#5C9A6A', r.followThrough, 'fin.')}
+      </div>
+
+      <!-- phases -->
+      <div style="margin-top:24px;background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:18px 16px">
+        <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600">Swing phases</div>
+        <div style="position:relative;margin-top:20px;display:flex;justify-content:space-between;align-items:flex-start">
+          <div style="position:absolute;top:6px;left:6%;right:6%;height:2px;background:#E8EBE3"></div>
+          ${[['Address','#C8D0C8','#fff','#9AA39C',false],['Take-away','#C8D0C8','#fff','#9AA39C',false],['Top','#C2843B','#C2843B','#C2843B',true],['Downswing','#C2843B','#C2843B','#C2843B',true],['Impact','#4CAF50','#4CAF50','#3C463F',false],['Finish','#C8D0C8','#fff','#9AA39C',false]].map(([label,border,bg,tc,bold])=>`
+          <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;width:16%">
+            <span style="width:13px;height:13px;border-radius:50%;background:${bg};border:2px solid ${border};${bold?'box-shadow:0 0 0 4px rgba(194,132,59,.16)':''}"></span>
+            <span style="font-size:9.5px;color:${tc};${bold?'font-weight:700':''}text-align:center;line-height:1.2">${label}</span>
+          </div>`).join('')}
+        </div>
+        <div style="font-size:12px;color:#6B756F;margin-top:16px;line-height:1.45">Power loss begins at <span style="color:#C2843B;font-weight:600">Top</span> — the hips stall before the downswing fires.</div>
+      </div>
+
+      <!-- pro comparison -->
+      <div style="margin-top:18px;background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:18px 16px">
+        <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600">Compared to a tour pro</div>
+        <div style="display:flex;gap:12px;margin-top:14px">
+          <div style="flex:1">
+            <div style="aspect-ratio:3/4;border-radius:14px;overflow:hidden;background:repeating-linear-gradient(45deg,#EEF0EA 0 9px,#F6F7F1 9px 18px);position:relative;border:1px solid #E8EBE3">
+              <div style="position:absolute;top:8px;left:8px;font-size:9.5px;font-weight:700;color:#6B756F;background:rgba(255,255,255,.78);padding:2px 7px;border-radius:99px">You</div>
+              <div style="position:absolute;bottom:8px;left:10px;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:9.5px;color:#A6AEA6">${proLabel}</div>
+            </div>
+          </div>
+          <div style="flex:1">
+            <div style="aspect-ratio:3/4;border-radius:14px;overflow:hidden;background:repeating-linear-gradient(45deg,#1B4332 0 9px,#21503c 9px 18px);position:relative;border:1px solid #16382b">
+              <div style="position:absolute;top:8px;left:8px;font-size:9.5px;font-weight:700;color:#0E2A22;background:#7FD08A;padding:2px 7px;border-radius:99px">Tour Pro</div>
+              <div style="position:absolute;bottom:8px;left:10px;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:9.5px;color:rgba(220,238,222,.6)">reference</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:16px;display:flex;flex-direction:column;gap:13px">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><span style="font-size:12.5px;color:#3C463F;font-weight:500">Hip rotation</span><span style="font-size:11px;color:#9AA39C">you <b style="color:${hipc};font-weight:700">${r.hipDeg}°</b> · pro <b style="color:#3E8F58;font-weight:700">45°</b></span></div>
+            <div style="position:relative;height:6px;border-radius:99px;background:#EEF1EA"><div style="position:absolute;left:0;top:0;height:100%;width:${hipBarW}%;background:${hipc};border-radius:99px"></div><div style="position:absolute;left:100%;top:-2px;width:2px;height:10px;background:#3E8F58;border-radius:2px;transform:translateX(-2px)"></div></div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><span style="font-size:12.5px;color:#3C463F;font-weight:500">Tempo ratio</span><span style="font-size:11px;color:#9AA39C">you <b style="color:#3E8F58;font-weight:700">${r.tempoRatio}</b> · pro <b style="color:#3E8F58;font-weight:700">3.0:1</b></span></div>
+            <div style="position:relative;height:6px;border-radius:99px;background:#EEF1EA"><div style="position:absolute;left:0;top:0;height:100%;width:${tempoBarW}%;background:#3E8F58;border-radius:99px"></div><div style="position:absolute;left:100%;top:-2px;width:2px;height:10px;background:#3E8F58;border-radius:2px;transform:translateX(-2px)"></div></div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><span style="font-size:12.5px;color:#3C463F;font-weight:500">Head movement</span><span style="font-size:11px;color:#9AA39C">you <b style="color:#C2843B;font-weight:700">${r.headMovCm}cm</b> · pro <b style="color:#3E8F58;font-weight:700">1.2cm</b></span></div>
+            <div style="position:relative;height:6px;border-radius:99px;background:#EEF1EA"><div style="position:absolute;left:0;top:0;height:100%;width:${headBar}%;background:#C2843B;border-radius:99px"></div><div style="position:absolute;right:12%;top:-2px;width:2px;height:10px;background:#3E8F58;border-radius:2px"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- drill -->
+      <div style="margin-top:18px;background:linear-gradient(160deg,#1B4332,#10301f);border-radius:18px;padding:20px;color:#fff">
+        <div style="font-size:11px;letter-spacing:2.5px;color:#7FD08A;text-transform:uppercase;font-weight:600">Recommended drill</div>
+        <div style="font-family:'Spectral',Georgia,serif;font-size:23px;font-weight:600;margin-top:8px;line-height:1.1">Pump-and-Hold Downswing</div>
+        <div style="font-size:13.5px;color:rgba(216,232,219,.82);margin-top:8px;line-height:1.5">Pause halfway down and hold to groove a proper hip-lead sequence before release.</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px">
+          <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11.5px;color:rgba(200,222,205,.7)">3 sets · 10 reps · 5 min</div>
+          <div class="tap" style="display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:#7FD08A;cursor:pointer">Start drill <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#7FD08A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        </div>
+      </div>
+
+      <!-- pro CTA -->
+      <div style="margin-top:18px;background:linear-gradient(180deg,#FCFAF3,#F8F3E7);border:1px solid #E7DCC2;border-radius:18px;padding:16px;display:flex;align-items:center;gap:14px">
+        <div style="width:40px;height:40px;border-radius:11px;border:1px solid #DDC99C;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:'Spectral',Georgia,serif;font-size:18px;font-weight:600;color:#9A7636">P</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700;color:#5B4A28">SwingLens Pro</div>
+          <div style="font-size:11.5px;color:#9A8458;margin-top:2px;line-height:1.35">Unlimited analyses · pro comparisons · drill library</div>
+          <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:10.5px;color:#B79A5E;margin-top:5px">2 of 3 free analyses left on your account</div>
+        </div>
+        <div class="tap" style="padding:9px 15px;border-radius:11px;border:1.5px solid #C9A86A;color:#8A6B2E;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">Upgrade</div>
+      </div>
+
+      <!-- bottom CTA -->
+      <div onclick="App.goHome()" class="tap" style="margin-top:22px;padding:17px;border-radius:15px;background:#4CAF50;color:#08311C;text-align:center;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 8px 22px rgba(76,175,80,.3)">Analyze another swing</div>
+    `;
+  }
+
+  /* ── init ── */
+  function init() {
+    updateClock();
+    setInterval(updateClock, 30000);
+
+    document.getElementById('video-file-input').addEventListener('change', e => {
+      if (e.target.files[0]) {
+        handleFile(e.target.files[0]);
+        setTimeout(beginAnalysis, 300);
+      }
+    });
+  }
+
+  return { goHome, goUpload, goResults, startAnalysis, startRecording, stopRecording, setAngle, init };
+})();
+
+document.addEventListener('DOMContentLoaded', App.init);
+</script>
+</body>
+</html>
