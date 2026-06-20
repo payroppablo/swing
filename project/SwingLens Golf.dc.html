@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; }
+    @keyframes screenIn { from { transform: translateY(12px); } to { transform: translateY(0); } }
+    @keyframes scanMove { from { top: 5%; } to { top: 90%; } }
+    @keyframes ringfill { from { stroke-dashoffset: var(--circ); } to { stroke-dashoffset: var(--off); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes softPulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(130% 120% at 50% -10%, #F4F2EC 0%, #E6E2D8 70%, #DAD5C9 100%);padding:40px;box-sizing:border-box;font-family:-apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <x-import component="IOSDevice" from="./ios-frame.jsx" dark="{{ statusDark }}" hint-size="402px,874px">
+
+    <!-- ════════════════ HOME ════════════════ -->
+    <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+      <div style="position:relative;width:100%;height:100%;min-height:100%;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box;padding:78px 22px 36px;background:radial-gradient(125% 80% at 50% -8%, #2F6149 0%, #1B4332 42%, #0F2A21 100%);overflow:hidden;animation:screenIn .5s ease both;">
+        <div style="position:absolute;inset:0;background:repeating-linear-gradient(116deg, rgba(255,255,255,0.035) 0 30px, rgba(0,0,0,0.05) 30px 60px);opacity:.5;pointer-events:none;"></div>
+        <div style="position:absolute;top:-16%;left:50%;transform:translateX(-50%);width:150%;height:58%;background:radial-gradient(closest-side, rgba(150,214,152,0.2), transparent 72%);filter:blur(8px);pointer-events:none;"></div>
+        <div style="position:absolute;inset:0;background:radial-gradient(120% 100% at 50% 52%, transparent 54%, rgba(0,0,0,0.4));pointer-events:none;"></div>
+
+        <!-- top bar -->
+        <div style="position:relative;display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:40px;height:40px;border-radius:50%;border:1px solid rgba(196,224,200,0.5);display:flex;align-items:center;justify-content:center;font-family:'Spectral',Georgia,serif;font-size:16px;font-weight:600;color:#EBF3EC;letter-spacing:0.5px;">SL</div>
+            <div style="display:flex;flex-direction:column;gap:2px;">
+              <div style="font-size:9.5px;letter-spacing:2.5px;color:rgba(214,228,216,0.6);text-transform:uppercase;">Welcome back</div>
+              <div style="font-size:13.5px;font-weight:600;color:#EAF3EB;">Pablo</div>
+            </div>
+          </div>
+          <div style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;cursor:pointer;" style-active="transform:scale(0.94);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" stroke="#CFE3D2" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1M18.7 18.7l-2.1-2.1M7.4 7.4L5.3 5.3" stroke="#CFE3D2" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </div>
+        </div>
+
+        <!-- hero: wordmark + caddie -->
+        <div style="position:relative;">
+          <!-- wordmark (modern typography) -->
+          <div data-comment-anchor="89aff81024-div" style="font-family:-apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:44px;font-weight:800;letter-spacing:-1.8px;line-height:0.95;color:#FBFCFB;">Swing<span style="color:#7FD08A;">Lens</span></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:9px;">
+            <div style="height:1px;width:26px;background:rgba(167,224,174,0.55);"></div>
+            <div data-comment-anchor="65d954427e-span" style="font-family:-apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:6px;color:#A7E0AE;text-transform:uppercase;">Golf</div>
+          </div>
+
+          <!-- caddie -->
+          <div style="display:flex;align-items:flex-end;gap:11px;margin-top:26px;">
+            <div style="flex-shrink:0;">
+              <svg width="70" height="82" viewBox="0 0 80 92" fill="none">
+                <ellipse cx="40" cy="88" rx="22" ry="4" fill="rgba(0,0,0,0.22)"/>
+                <circle cx="40" cy="54" r="31" fill="#FBFCFB"/>
+                <circle cx="40" cy="54" r="31" stroke="rgba(0,0,0,0.06)" stroke-width="1"/>
+                <circle cx="27" cy="63" r="1.9" fill="#E6EAE3"/>
+                <circle cx="40" cy="69" r="1.9" fill="#E6EAE3"/>
+                <circle cx="53" cy="63" r="1.9" fill="#E6EAE3"/>
+                <circle cx="24" cy="52" r="1.9" fill="#E6EAE3"/>
+                <circle cx="56" cy="52" r="1.9" fill="#E6EAE3"/>
+                <circle cx="33" cy="52" r="3.6" fill="#16201B"/>
+                <circle cx="47" cy="52" r="3.6" fill="#16201B"/>
+                <circle cx="34.2" cy="50.7" r="1" fill="#fff"/>
+                <circle cx="48.2" cy="50.7" r="1" fill="#fff"/>
+                <path d="M32 61 Q40 68 48 61" stroke="#16201B" stroke-width="2.4" stroke-linecap="round"/>
+                <path d="M13 33 Q40 5 67 33 Z" fill="#1B4332" data-comment-anchor="86ceec5587-path"/>
+                <path d="M59 33 Q81 29 83 38 Q70 40 56 37 Z" fill="#14342B"/>
+                <circle cx="40" cy="11" r="4.2" fill="#4CAF50"/>
+                <path d="M14 33 Q40 27 66 33" stroke="#4CAF50" stroke-width="2.5"/>
+              </svg>
+            </div>
+            <div style="flex:1;position:relative;background:rgba(255,255,255,0.09);border:1px solid rgba(255,255,255,0.14);border-radius:16px 16px 16px 4px;padding:13px 15px;backdrop-filter:blur(8px);">
+              <div style="font-size:10px;letter-spacing:1.5px;color:#7FD08A;text-transform:uppercase;font-weight:700;margin-bottom:5px;">Birdie · your caddie</div>
+              <div style="font-family:'Spectral',Georgia,serif;font-style:italic;font-size:15px;color:#EAF3EB;line-height:1.4;">"Ready when you are — send me a swing and I'll read every detail."</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- menu -->
+        <div style="position:relative;display:flex;flex-direction:column;gap:10px;">
+          <div onClick="{{ goUpload }}" style="display:flex;align-items:center;gap:14px;padding:15px 16px;border-radius:18px;background:#4CAF50;cursor:pointer;box-shadow:0 10px 26px rgba(76,175,80,0.32);" style-active="transform:scale(0.985);" data-comment-anchor="d3399814c6-div">
+            <div style="width:42px;height:42px;border-radius:12px;background:rgba(8,49,28,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="#08311C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V16" stroke="#08311C" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:16px;font-weight:700;color:#08311C;">Upload Swing</div>
+              <div style="font-size:12px;color:rgba(8,49,28,0.62);margin-top:1px;">Record or pick from gallery</div>
+            </div>
+            <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5l6 6-6 6" stroke="#08311C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+
+          <div onClick="{{ goResults }}" style="display:flex;align-items:center;gap:14px;padding:15px 16px;border-radius:18px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);cursor:pointer;backdrop-filter:blur(8px);" style-active="transform:scale(0.985);background:rgba(255,255,255,0.13);">
+            <div style="width:42px;height:42px;border-radius:12px;background:rgba(127,208,138,0.14);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="#7FD08A" stroke-width="1.8"/><path d="M12 7.5V12l3 2" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:15.5px;font-weight:600;color:#EAF3EB;">Previous Swings</div>
+              <div style="font-size:12px;color:rgba(206,226,209,0.6);margin-top:1px;">Review your past reports</div>
+            </div>
+            <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5l6 6-6 6" stroke="rgba(206,226,209,0.55)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+
+          <div onClick="{{ goResults }}" style="display:flex;align-items:center;gap:14px;padding:15px 16px;border-radius:18px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);cursor:pointer;backdrop-filter:blur(8px);" style-active="transform:scale(0.985);background:rgba(255,255,255,0.13);">
+            <div style="width:42px;height:42px;border-radius:12px;background:rgba(127,208,138,0.14);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 3v18" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round"/><path d="M6.5 4h11l-2.6 3.5L17.5 11h-11" stroke="#7FD08A" stroke-width="1.8" stroke-linejoin="round" fill="none"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:15.5px;font-weight:600;color:#EAF3EB;">Drills & Tips</div>
+              <div style="font-size:12px;color:rgba(206,226,209,0.6);margin-top:1px;">Coaching picked by Birdie</div>
+            </div>
+            <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5l6 6-6 6" stroke="rgba(206,226,209,0.55)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+
+          <div style="text-align:center;font-size:12px;color:rgba(214,228,216,0.58);margin-top:8px;letter-spacing:0.2px;">3 free analyses on your account</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ════════════════ UPLOAD ════════════════ -->
+    <sc-if value="{{ isUpload }}">
+      <div style="position:relative;width:100%;height:100%;min-height:100%;display:flex;flex-direction:column;box-sizing:border-box;padding:84px 24px 40px;background:#FBFBF8;animation:screenIn .45s ease both;">
+        <div onClick="{{ goHome }}" style="position:absolute;top:74px;left:20px;width:38px;height:38px;border-radius:50%;background:#fff;border:1px solid #ECEAE3;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.04);" style-active="transform:scale(0.94);">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#1B4332" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+
+        <div style="margin-top:6px;">
+          <div style="font-size:11px;letter-spacing:3px;color:#4CAF50;text-transform:uppercase;font-weight:600;">Step 1 of 2</div>
+          <div style="font-family:'Spectral',Georgia,serif;font-size:34px;font-weight:600;color:#16201B;letter-spacing:-0.5px;margin-top:8px;line-height:1.05;">Upload your swing</div>
+          <div style="font-size:14.5px;color:#6B756F;margin-top:8px;line-height:1.5;max-width:300px;">Film face-on or down-the-line. A single clean rep is all we need.</div>
+        </div>
+
+        <!-- dropzone -->
+        <div onClick="{{ startAnalysis }}" style="margin-top:26px;border:1.5px dashed #C3CEC6;border-radius:22px;background:repeating-linear-gradient(45deg,#F1F2EC 0 11px,#F7F8F2 11px 22px);height:226px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;cursor:pointer;position:relative;overflow:hidden;" style-active="transform:scale(0.99);">
+          <div style="width:60px;height:60px;border-radius:50%;background:#fff;border:1px solid #E4E7E0;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="#1B4332" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V16" stroke="#1B4332" stroke-width="1.9" stroke-linecap="round"/></svg>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:15px;font-weight:600;color:#1B4332;">Tap to browse files</div>
+            <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:0.3px;">mp4 · mov · up to 30s</div>
+          </div>
+        </div>
+
+        <!-- buttons -->
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:auto;">
+          <div onClick="{{ startAnalysis }}" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:17px;border-radius:15px;background:#4CAF50;color:#08311C;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 8px 22px rgba(76,175,80,0.3);" style-active="transform:scale(0.98);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="6.5" width="13.5" height="11" rx="3" stroke="#08311C" stroke-width="1.9"/><path d="M16 10.5l5-2.5v8l-5-2.5" stroke="#08311C" stroke-width="1.9" stroke-linejoin="round" fill="none"/></svg>
+            Record Swing
+          </div>
+          <div onClick="{{ startAnalysis }}" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:17px;border-radius:15px;background:#fff;border:1.5px solid #D9DDD4;color:#1B4332;font-size:16px;font-weight:600;cursor:pointer;" style-active="transform:scale(0.98);background:#F4F5EF;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="15" rx="3" stroke="#1B4332" stroke-width="1.8"/><circle cx="8.5" cy="9.5" r="1.7" fill="#1B4332"/><path d="M4 16.5l4.5-3.5 3.5 2.6 3-2 4 3" stroke="#1B4332" stroke-width="1.8" stroke-linejoin="round" fill="none"/></svg>
+            Choose from Gallery
+          </div>
+          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:0.2px;">Best results: 120fps · steady camera</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ════════════════ ANALYSIS ════════════════ -->
+    <sc-if value="{{ isAnalysis }}">
+      <div style="position:relative;width:100%;height:100%;min-height:100%;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box;padding:92px 30px 48px;background:radial-gradient(120% 90% at 50% 30%, #214d3a 0%, #15362a 55%, #0D241C 100%);overflow:hidden;animation:screenIn .45s ease both;">
+        <div style="position:relative;text-align:center;">
+          <div style="font-size:11px;letter-spacing:4px;color:#7FD08A;text-transform:uppercase;font-weight:600;">Analyzing</div>
+        </div>
+
+        <!-- reticle -->
+        <div style="position:relative;align-self:center;width:296px;height:296px;border-radius:24px;overflow:hidden;background:repeating-linear-gradient(45deg, rgba(255,255,255,0.04) 0 11px, rgba(255,255,255,0.075) 11px 22px);box-shadow:0 0 0 1px rgba(127,208,138,0.25), 0 24px 50px rgba(0,0,0,0.35);">
+          <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(127,208,138,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(127,208,138,0.06) 1px,transparent 1px);background-size:37px 37px;"></div>
+          <div style="position:absolute;top:14px;left:14px;width:26px;height:26px;border-top:2px solid #7FD08A;border-left:2px solid #7FD08A;border-radius:4px 0 0 0;"></div>
+          <div style="position:absolute;top:14px;right:14px;width:26px;height:26px;border-top:2px solid #7FD08A;border-right:2px solid #7FD08A;border-radius:0 4px 0 0;"></div>
+          <div style="position:absolute;bottom:14px;left:14px;width:26px;height:26px;border-bottom:2px solid #7FD08A;border-left:2px solid #7FD08A;border-radius:0 0 0 4px;"></div>
+          <div style="position:absolute;bottom:14px;right:14px;width:26px;height:26px;border-bottom:2px solid #7FD08A;border-right:2px solid #7FD08A;border-radius:0 0 4px 0;"></div>
+          <div style="position:absolute;left:6%;right:6%;height:2px;background:linear-gradient(90deg,transparent,#5FE06E,transparent);box-shadow:0 0 18px 3px rgba(95,224,110,0.55);top:5%;animation:scanMove 1.9s ease-in-out infinite alternate;"></div>
+          <div style="position:absolute;bottom:12px;left:16px;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:10.5px;letter-spacing:0.4px;color:rgba(220,238,222,0.5);">swing video · tracking</div>
+        </div>
+
+        <!-- progress block -->
+        <div style="position:relative;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:20px;height:20px;border:2.5px solid rgba(127,208,138,0.25);border-top-color:#5FE06E;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></div>
+            <div style="font-family:'Spectral',Georgia,serif;font-size:23px;font-weight:600;color:#F4FAF5;">Analyzing swing…</div>
+          </div>
+          <div style="font-size:13.5px;color:rgba(206,226,209,0.78);margin-top:10px;min-height:18px;">{{ statusText }}</div>
+          <div style="margin-top:16px;height:6px;border-radius:99px;background:rgba(255,255,255,0.1);overflow:hidden;">
+            <div style="height:100%;width:{{ progressPct }};background:linear-gradient(90deg,#4CAF50,#7FD08A);border-radius:99px;transition:width .25s ease;box-shadow:0 0 12px rgba(95,224,110,0.5);"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+            <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:12px;color:#7FD08A;">{{ progressNum }}%</div>
+            <div style="font-size:11px;letter-spacing:2px;color:rgba(190,212,194,0.6);text-transform:uppercase;">Tour-grade model</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ════════════════ RESULTS ════════════════ -->
+    <sc-if value="{{ isResults }}">
+      <div style="position:relative;width:100%;min-height:100%;box-sizing:border-box;padding:80px 20px 40px;background:#FBFBF8;animation:screenIn .5s ease both;" data-comment-anchor="ad2b804c2f-div">
+        <!-- header -->
+        <div style="display:flex;align-items:center;gap:12px;padding:0 4px;">
+          <div onClick="{{ goHome }}" style="width:38px;height:38px;border-radius:50%;background:#fff;border:1px solid #ECEAE3;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;" style-active="transform:scale(0.94);">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#1B4332" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div style="font-size:11px;letter-spacing:3px;color:#4CAF50;text-transform:uppercase;font-weight:600;">Swing Report</div>
+        </div>
+
+        <!-- score hero -->
+        <div style="display:flex;flex-direction:column;align-items:center;margin-top:18px;">
+          <div style="position:relative;width:172px;height:172px;">
+            <svg width="172" height="172" viewBox="0 0 172 172">
+              <circle cx="86" cy="86" r="70" fill="none" stroke="#EAEDE5" stroke-width="13"/>
+              <circle cx="86" cy="86" r="70" fill="none" stroke="#4CAF50" stroke-width="13" stroke-linecap="round" transform="rotate(-90 86 86)" style="stroke-dasharray:{{ ringCirc }};--circ:{{ ringCirc }};--off:{{ ringOff }};animation:ringfill 1.3s cubic-bezier(.2,.7,.2,1) .25s both;"/>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+              <div style="font-family:'Spectral',Georgia,serif;font-size:56px;font-weight:600;color:#16201B;line-height:1;">{{ score }}</div>
+              <div style="font-size:10.5px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;margin-top:2px;">Swing Score</div>
+            </div>
+          </div>
+          <div style="font-family:'Spectral',Georgia,serif;font-style:italic;font-size:16.5px;color:#3C463F;margin-top:14px;text-align:center;max-width:280px;line-height:1.4;">{{ verdict }}</div>
+        </div>
+
+        <!-- insights -->
+        <div style="margin-top:28px;display:flex;flex-direction:column;gap:11px;" data-comment-anchor="69d66184eb-div">
+          <div style="font-size:11px;letter-spacing:2.5px;color:#3E8F58;text-transform:uppercase;font-weight:600;padding-left:4px;">What you're doing well</div>
+
+          <div style="display:flex;gap:14px;align-items:flex-start;background:#fff;border:1px solid #E1EDE4;border-radius:18px;padding:15px;">
+            <div style="width:44px;height:44px;border-radius:13px;background:#EAF6EC;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#3E8F58" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:15px;font-weight:600;color:#16201B;">Smooth, repeatable tempo</div>
+              <div style="font-size:13px;color:#6B756F;margin-top:3px;line-height:1.45;">Your 3:1 backswing-to-downswing ratio is tour-standard.</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:8px;"><span style="width:7px;height:7px;border-radius:50%;background:#3E8F58;"></span><span style="font-size:11.5px;font-weight:600;color:#3E8F58;letter-spacing:0.3px;">Strength</span></div>
+            </div>
+            <div style="text-align:center;flex-shrink:0;"><div style="font-family:'Spectral',Georgia,serif;font-size:22px;font-weight:600;color:#3E8F58;">88</div><div style="font-size:9px;letter-spacing:1px;color:#B3BBB4;text-transform:uppercase;">tempo</div></div>
+          </div>
+
+          <div style="display:flex;gap:14px;align-items:flex-start;background:#fff;border:1px solid #E1EDE4;border-radius:18px;padding:15px;">
+            <div style="width:44px;height:44px;border-radius:13px;background:#EAF6EC;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#3E8F58" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:15px;font-weight:600;color:#16201B;">Solid setup & alignment</div>
+              <div style="font-size:13px;color:#6B756F;margin-top:3px;line-height:1.45;">Posture and aim at address are right on plane.</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:8px;"><span style="width:7px;height:7px;border-radius:50%;background:#3E8F58;"></span><span style="font-size:11.5px;font-weight:600;color:#3E8F58;letter-spacing:0.3px;">Strength</span></div>
+            </div>
+            <div style="text-align:center;flex-shrink:0;"><div style="font-family:'Spectral',Georgia,serif;font-size:22px;font-weight:600;color:#3E8F58;">84</div><div style="font-size:9px;letter-spacing:1px;color:#B3BBB4;text-transform:uppercase;">setup</div></div>
+          </div>
+
+          <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600;padding-left:4px;margin-top:10px;">Focus areas</div>
+
+          <div style="display:flex;gap:14px;align-items:flex-start;background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:15px;">
+            <div style="width:44px;height:44px;border-radius:13px;background:#1B4332;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7" stroke="#7FD08A" stroke-width="1.8"/><circle cx="12" cy="12" r="1.8" fill="#7FD08A"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:15px;font-weight:600;color:#16201B;">Head stability needs improvement</div>
+              <div style="font-size:13px;color:#6B756F;margin-top:3px;line-height:1.45;">Your head drifts ~4 cm toward the target through impact.</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:8px;"><span style="width:7px;height:7px;border-radius:50%;background:#C2843B;"></span><span style="font-size:11.5px;font-weight:600;color:#C2843B;letter-spacing:0.3px;">Priority</span></div>
+            </div>
+            <div style="text-align:center;flex-shrink:0;"><div style="font-family:'Spectral',Georgia,serif;font-size:22px;font-weight:600;color:#1B4332;">62</div><div style="font-size:9px;letter-spacing:1px;color:#B3BBB4;text-transform:uppercase;">stab.</div></div>
+          </div>
+
+          <div style="display:flex;gap:14px;align-items:flex-start;background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:15px;">
+            <div style="width:44px;height:44px;border-radius:13px;background:#1B4332;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M19 12a7 7 0 1 1-2.05-4.95" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round"/><path d="M19 4v4.2h-4.2" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:15px;font-weight:600;color:#16201B;">Hip rotation is delayed</div>
+              <div style="font-size:13px;color:#6B756F;margin-top:3px;line-height:1.45;">Hips open ~0.1s late, leaking power and lag at impact.</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:8px;"><span style="width:7px;height:7px;border-radius:50%;background:#C2843B;"></span><span style="font-size:11.5px;font-weight:600;color:#C2843B;letter-spacing:0.3px;">Moderate</span></div>
+            </div>
+            <div style="text-align:center;flex-shrink:0;"><div style="font-family:'Spectral',Georgia,serif;font-size:22px;font-weight:600;color:#1B4332;">71</div><div style="font-size:9px;letter-spacing:1px;color:#B3BBB4;text-transform:uppercase;">rot.</div></div>
+          </div>
+
+          <div style="display:flex;gap:14px;align-items:flex-start;background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:15px;">
+            <div style="width:44px;height:44px;border-radius:13px;background:#1B4332;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 17c5.5 2 13-.5 16.5-9.5" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round"/><path d="M19.5 4l1.6 4.1-4.2.6" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:15px;font-weight:600;color:#16201B;">Follow-through is inconsistent</div>
+              <div style="font-size:13px;color:#6B756F;margin-top:3px;line-height:1.45;">Finish position varies noticeably rep to rep.</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:8px;"><span style="width:7px;height:7px;border-radius:50%;background:#5C9A6A;"></span><span style="font-size:11.5px;font-weight:600;color:#5C9A6A;letter-spacing:0.3px;">Minor</span></div>
+            </div>
+            <div style="text-align:center;flex-shrink:0;"><div style="font-family:'Spectral',Georgia,serif;font-size:22px;font-weight:600;color:#1B4332;">68</div><div style="font-size:9px;letter-spacing:1px;color:#B3BBB4;text-transform:uppercase;">fin.</div></div>
+          </div>
+        </div>
+
+        <!-- phases -->
+        <div style="margin-top:24px;background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:18px 16px;">
+          <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600;">Swing phases</div>
+          <div style="position:relative;margin-top:20px;display:flex;justify-content:space-between;align-items:flex-start;">
+            <div style="position:absolute;top:6px;left:6%;right:6%;height:2px;background:#E8EBE3;"></div>
+            <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;width:16%;"><span style="width:13px;height:13px;border-radius:50%;background:#fff;border:2px solid #C8D0C8;"></span><span style="font-size:9.5px;color:#9AA39C;text-align:center;line-height:1.2;">Address</span></div>
+            <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;width:16%;"><span style="width:13px;height:13px;border-radius:50%;background:#fff;border:2px solid #C8D0C8;"></span><span style="font-size:9.5px;color:#9AA39C;text-align:center;line-height:1.2;">Take-away</span></div>
+            <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;width:16%;"><span style="width:13px;height:13px;border-radius:50%;background:#C2843B;border:2px solid #C2843B;box-shadow:0 0 0 4px rgba(194,132,59,0.16);"></span><span style="font-size:9.5px;color:#C2843B;font-weight:700;text-align:center;line-height:1.2;">Top</span></div>
+            <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;width:16%;"><span style="width:13px;height:13px;border-radius:50%;background:#C2843B;border:2px solid #C2843B;box-shadow:0 0 0 4px rgba(194,132,59,0.16);"></span><span style="font-size:9.5px;color:#C2843B;font-weight:700;text-align:center;line-height:1.2;">Downswing</span></div>
+            <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;width:16%;"><span style="width:13px;height:13px;border-radius:50%;background:#4CAF50;border:2px solid #4CAF50;"></span><span style="font-size:9.5px;color:#3C463F;text-align:center;line-height:1.2;">Impact</span></div>
+            <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;width:16%;"><span style="width:13px;height:13px;border-radius:50%;background:#fff;border:2px solid #C8D0C8;"></span><span style="font-size:9.5px;color:#9AA39C;text-align:center;line-height:1.2;">Finish</span></div>
+          </div>
+          <div style="font-size:12px;color:#6B756F;margin-top:16px;line-height:1.45;">Power loss begins at <span style="color:#C2843B;font-weight:600;">Top</span> — the hips stall before the downswing fires.</div>
+        </div>
+
+        <!-- pro comparison -->
+        <div style="margin-top:18px;background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:18px 16px;">
+          <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600;">Compared to a tour pro</div>
+          <div style="display:flex;gap:12px;margin-top:14px;">
+            <div style="flex:1;">
+              <div style="aspect-ratio:3/4;border-radius:14px;overflow:hidden;background:repeating-linear-gradient(45deg,#EEF0EA 0 9px,#F6F7F1 9px 18px);position:relative;border:1px solid #E8EBE3;">
+                <div style="position:absolute;top:8px;left:8px;font-size:9.5px;font-weight:700;color:#6B756F;background:rgba(255,255,255,0.78);padding:2px 7px;border-radius:99px;">You</div>
+                <div style="position:absolute;bottom:8px;left:10px;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:9.5px;color:#A6AEA6;">your swing</div>
+              </div>
+            </div>
+            <div style="flex:1;">
+              <div style="aspect-ratio:3/4;border-radius:14px;overflow:hidden;background:repeating-linear-gradient(45deg,#1B4332 0 9px,#21503c 9px 18px);position:relative;border:1px solid #16382b;">
+                <div style="position:absolute;top:8px;left:8px;font-size:9.5px;font-weight:700;color:#0E2A22;background:#7FD08A;padding:2px 7px;border-radius:99px;">Tour Pro</div>
+                <div style="position:absolute;bottom:8px;left:10px;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:9.5px;color:rgba(220,238,222,0.6);">reference</div>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:16px;display:flex;flex-direction:column;gap:13px;">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;"><span style="font-size:12.5px;color:#3C463F;font-weight:500;">Hip rotation</span><span style="font-size:11px;color:#9AA39C;">you <b style="color:#C2843B;font-weight:700;">31°</b> · pro <b style="color:#3E8F58;font-weight:700;">45°</b></span></div>
+              <div style="position:relative;height:6px;border-radius:99px;background:#EEF1EA;"><div style="position:absolute;left:0;top:0;height:100%;width:69%;background:#C2843B;border-radius:99px;"></div><div style="position:absolute;left:100%;top:-2px;width:2px;height:10px;background:#3E8F58;border-radius:2px;transform:translateX(-2px);"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;"><span style="font-size:12.5px;color:#3C463F;font-weight:500;">Tempo ratio</span><span style="font-size:11px;color:#9AA39C;">you <b style="color:#3E8F58;font-weight:700;">3.0:1</b> · pro <b style="color:#3E8F58;font-weight:700;">3.0:1</b></span></div>
+              <div style="position:relative;height:6px;border-radius:99px;background:#EEF1EA;"><div style="position:absolute;left:0;top:0;height:100%;width:100%;background:#3E8F58;border-radius:99px;"></div><div style="position:absolute;left:100%;top:-2px;width:2px;height:10px;background:#3E8F58;border-radius:2px;transform:translateX(-2px);"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;"><span style="font-size:12.5px;color:#3C463F;font-weight:500;">Head movement</span><span style="font-size:11px;color:#9AA39C;">you <b style="color:#C2843B;font-weight:700;">4.0cm</b> · pro <b style="color:#3E8F58;font-weight:700;">1.2cm</b></span></div>
+              <div style="position:relative;height:6px;border-radius:99px;background:#EEF1EA;"><div style="position:absolute;left:0;top:0;height:100%;width:34%;background:#C2843B;border-radius:99px;"></div><div style="position:absolute;left:88%;top:-2px;width:2px;height:10px;background:#3E8F58;border-radius:2px;transform:translateX(-2px);"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- drill -->
+        <div style="margin-top:18px;background:linear-gradient(160deg,#1B4332,#10301f);border-radius:18px;padding:20px;color:#fff;">
+          <div style="font-size:11px;letter-spacing:2.5px;color:#7FD08A;text-transform:uppercase;font-weight:600;">Recommended drill</div>
+          <div style="font-family:'Spectral',Georgia,serif;font-size:23px;font-weight:600;margin-top:8px;line-height:1.1;">Pump-and-Hold Downswing</div>
+          <div style="font-size:13.5px;color:rgba(216,232,219,0.82);margin-top:8px;line-height:1.5;">Pause halfway down and hold to groove a proper hip-lead sequence before release.</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;">
+            <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11.5px;color:rgba(200,222,205,0.7);">3 sets · 10 reps · 5 min</div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:#7FD08A;cursor:pointer;">Start drill <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#7FD08A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+
+        <!-- pro cta (subtle) -->
+        <sc-if value="{{ showPro }}">
+          <div style="margin-top:18px;background:linear-gradient(180deg,#FCFAF3,#F8F3E7);border:1px solid #E7DCC2;border-radius:18px;padding:16px;display:flex;align-items:center;gap:14px;">
+            <div style="width:40px;height:40px;border-radius:11px;border:1px solid #DDC99C;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:'Spectral',Georgia,serif;font-size:18px;font-weight:600;color:#9A7636;">P</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:14.5px;font-weight:700;color:#5B4A28;">SwingLens Pro</div>
+              <div style="font-size:11.5px;color:#9A8458;margin-top:2px;line-height:1.35;">Unlimited analyses · pro comparisons · drill library</div>
+              <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:10.5px;color:#B79A5E;margin-top:5px;" data-comment-anchor="8098187c8e-div">{{ freeLeft }} of 3 free analyses left on your account</div>
+            </div>
+            <div style="padding:9px 15px;border-radius:11px;border:1.5px solid #C9A86A;color:#8A6B2E;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;" style-active="transform:scale(0.96);">Upgrade</div>
+          </div>
+        </sc-if>
+
+        <!-- bottom action -->
+        <div onClick="{{ goHome }}" style="margin-top:22px;padding:17px;border-radius:15px;background:#4CAF50;color:#08311C;text-align:center;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 8px 22px rgba(76,175,80,0.3);" style-active="transform:scale(0.98);">Analyze another swing</div>
+      </div>
+    </sc-if>
+
+  </x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;482px&quot;,&quot;height&quot;:&quot;954px&quot;},&quot;swingScore&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:96,&quot;min&quot;:0,&quot;max&quot;:100,&quot;tsType&quot;:&quot;number&quot;},&quot;showProBadge&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;freeAnalysesLeft&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:2,&quot;min&quot;:0,&quot;max&quot;:3,&quot;tsType&quot;:&quot;number&quot;}}">
+class Component extends DCLogic {
+  state = { screen: 'home', progress: 0, statusIndex: 0 };
+
+  startAnalysis = () => {
+    this.clearTimer();
+    this.setState({ screen: 'analysis', progress: 0, statusIndex: 0 });
+    this._t = setInterval(() => {
+      this.setState(s => {
+        const p = s.progress + 2;
+        const idx = p < 22 ? 0 : p < 44 ? 1 : p < 66 ? 2 : p < 86 ? 3 : 4;
+        if (p >= 100) {
+          this.clearTimer();
+          setTimeout(() => this.setState({ screen: 'results' }), 380);
+          return { progress: 100, statusIndex: 4 };
+        }
+        return { progress: p, statusIndex: idx };
+      });
+    }, 55);
+  };
+
+  clearTimer() { if (this._t) { clearInterval(this._t); this._t = null; } }
+  componentWillUnmount() { this.clearTimer(); }
+  go = (screen) => { this.clearTimer(); this.setState({ screen }); };
+
+  renderVals() {
+    const s = this.state.screen;
+    const statuses = [
+      'Detecting posture & spine angle',
+      'Tracking club path & face angle',
+      'Measuring tempo & balance',
+      'Comparing against tour pros',
+      'Finalizing your report',
+    ];
+    const score = Math.max(0, Math.min(100, this.props.swingScore ?? 78));
+    const C = 2 * Math.PI * 70;
+    const off = C * (1 - score / 100);
+    const verdict =
+      score >= 85 ? 'Excellent — tour-level fundamentals.' :
+      score >= 70 ? 'Solid — with clear gains ahead.' :
+      score >= 50 ? 'Developing — focus on the basics.' :
+                    'Needs work — start with your setup.';
+    return {
+      isHome: s === 'home',
+      isUpload: s === 'upload',
+      isAnalysis: s === 'analysis',
+      isResults: s === 'results',
+      statusDark: s === 'home' || s === 'analysis',
+      progressPct: this.state.progress + '%',
+      progressNum: this.state.progress,
+      statusText: statuses[this.state.statusIndex],
+      score,
+      verdict,
+      ringCirc: C.toFixed(2),
+      ringOff: off.toFixed(2),
+      showPro: this.props.showProBadge ?? true,
+      freeLeft: this.props.freeAnalysesLeft ?? 2,
+      goHome: () => this.go('home'),
+      goUpload: () => this.go('upload'),
+      goResults: () => this.go('results'),
+      startAnalysis: this.startAnalysis,
+    };
+  }
+}
+</script>
+</body>
+</html>

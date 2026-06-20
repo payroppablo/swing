@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwingLens Golf — Test de cámara + MoveNet</title>
+<style>
+  :root {
+    --bg: #0b1410;
+    --panel: #11201a;
+    --border: #1f3329;
+    --text: #e8f0ea;
+    --text-dim: #8aa396;
+    --accent: #3ddc84;
+    --danger: #e2574c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  .wrap { width: 100%; max-width: 480px; }
+  header { margin-bottom: 16px; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 2px; }
+  .step { font-size: 13px; color: var(--text-dim); }
+  .stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 9 / 16;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  video, canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  canvas { pointer-events: none; }
+  .placeholder {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim); font-size: 13px; text-align: center; padding: 0 24px;
+  }
+  .controls { display: flex; gap: 8px; margin-top: 12px; }
+  .controls2 { margin-top: 8px; }
+  select, button {
+    font-family: inherit; font-size: 14px;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px;
+  }
+  select { flex: 1; }
+  button {
+    background: var(--accent); color: #06150c; font-weight: 600;
+    border: none; cursor: pointer; width: 100%;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button:active:not(:disabled) { opacity: 0.85; }
+  button.stop { background: var(--danger); color: #fff; }
+  .panel {
+    margin-top: 16px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+  .row span:first-child { color: var(--text-dim); }
+  .row span:last-child { font-family: ui-monospace, SFMono-Regular, monospace; }
+  .ok { color: var(--accent); }
+  .err { color: var(--danger); }
+  .next {
+    margin-top: 14px; font-size: 12px; color: var(--text-dim);
+    border-top: 1px dashed var(--border); padding-top: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>SwingLens Golf</h1>
+    <div class="step">Paso 2 — MoveNet en vivo sobre la cámara</div>
+  </header>
+
+  <div class="stage" id="stage">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div class="placeholder" id="placeholder">Toca "Iniciar cámara" para empezar</div>
+  </div>
+
+  <div class="controls">
+    <select id="cameraSelect"><option value="">Cámara por defecto</option></select>
+    <button id="toggleBtn">Iniciar cámara</button>
+  </div>
+  <div class="controls2">
+    <button id="loadModelBtn">Cargar MoveNet</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><span>Cámara</span><span id="stateOut">inactiva</span></div>
+    <div class="row"><span>Resolución</span><span id="resOut">—</span></div>
+    <div class="row"><span>FPS (render)</span><span id="fpsOut">—</span></div>
+    <div class="row"><span>Modelo</span><span id="modelOut">no cargado</span></div>
+    <div class="row"><span>FPS (inferencia)</span><span id="detectFpsOut">—</span></div>
+  </div>
+
+  <div class="next">
+    Siguiente paso: cambiar de vista en vivo a grabar un clip y procesarlo después, y empezar a calcular ángulos (hombros, caderas, X-factor) a partir de los keypoints.
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@latest/dist/pose-detection.min.js"></script>
+
+<script>
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const placeholder = document.getElementById('placeholder');
+  const cameraSelect = document.getElementById('cameraSelect');
+  const toggleBtn = document.getElementById('toggleBtn');
+  const loadModelBtn = document.getElementById('loadModelBtn');
+  const stateOut = document.getElementById('stateOut');
+  const resOut = document.getElementById('resOut');
+  const fpsOut = document.getElementById('fpsOut');
+  const modelOut = document.getElementById('modelOut');
+  const detectFpsOut = document.getElementById('detectFpsOut');
+
+  let stream = null;
+  let rafId = null;
+  let frameCount = 0;
+  let lastFpsTime = performance.now();
+
+  let detector = null;
+  let modelReady = false;
+  let detecting = false;
+  let latestPoses = [];
+  let detectFrameCount = 0;
+  let lastDetectFpsTime = performance.now();
+
+  const MIN_SCORE = 0.3;
+  const EDGES = [
+    ['left_shoulder', 'right_shoulder'],
+    ['left_shoulder', 'left_elbow'], ['left_elbow', 'left_wrist'],
+    ['right_shoulder', 'right_elbow'], ['right_elbow', 'right_wrist'],
+    ['left_shoulder', 'left_hip'], ['right_shoulder', 'right_hip'],
+    ['left_hip', 'right_hip'],
+    ['left_hip', 'left_knee'], ['left_knee', 'left_ankle'],
+    ['right_hip', 'right_knee'], ['right_knee', 'right_ankle'],
+    ['nose', 'left_shoulder'], ['nose', 'right_shoulder']
+  ];
+
+  function setState(text, kind) {
+    stateOut.textContent = text;
+    stateOut.className = kind || '';
+  }
+  function setModelState(text, kind) {
+    modelOut.textContent = text;
+    modelOut.className = kind || '';
+  }
+
+  async function listCameras() {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter(d => d.kind === 'videoinput');
+      cameraSelect.innerHTML = '<option value="">Cámara por defecto</option>';
+      cams.forEach((cam, i) => {
+        const opt = document.createElement('option');
+        opt.value = cam.deviceId;
+        opt.textContent = cam.label || `Cámara ${i + 1}`;
+        cameraSelect.appendChild(opt);
+      });
+    } catch (err) {
+      console.error('No se pudo listar cámaras', err);
+    }
+  }
+
+  async function startCamera() {
+    setState('solicitando permiso…');
+    const deviceId = cameraSelect.value;
+    const constraints = {
+      audio: false,
+      video: deviceId
+        ? { deviceId: { exact: deviceId } }
+        : { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    };
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+      await video.play();
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      resOut.textContent = `${video.videoWidth} × ${video.videoHeight}`;
+
+      placeholder.style.display = 'none';
+      toggleBtn.textContent = 'Detener cámara';
+      toggleBtn.classList.add('stop');
+      setState('activa', 'ok');
+
+      await listCameras();
+      frameCount = 0;
+      lastFpsTime = performance.now();
+      renderLoop();
+
+      if (modelReady && !detecting) {
+        detecting = true;
+        detectLoop();
+      }
+    } catch (err) {
+      console.error(err);
+      const messages = {
+        NotAllowedError: 'Permiso de cámara denegado. Revisa los permisos del sitio.',
+        NotFoundError: 'No se encontró ninguna cámara.',
+        NotReadableError: 'La cámara está siendo usada por otra app.',
+      };
+      setState(messages[err.name] || `Error: ${err.message}`, 'err');
+    }
+  }
+
+  function stopCamera() {
+    if (rafId) cancelAnimationFrame(rafId);
+    detecting = false;
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null;
+    video.srcObject = null;
+    placeholder.style.display = 'flex';
+    placeholder.textContent = 'Toca "Iniciar cámara" para empezar';
+    toggleBtn.textContent = 'Iniciar cámara';
+    toggleBtn.classList.remove('stop');
+    setState('inactiva');
+    resOut.textContent = '—';
+    fpsOut.textContent = '—';
+    detectFpsOut.textContent = '—';
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  async function loadModel() {
+    loadModelBtn.disabled = true;
+    setModelState('cargando…');
+    try {
+      try {
+        await tf.setBackend('webgl');
+      } catch (e) {
+        console.warn('webgl no disponible, usando cpu', e);
+        await tf.setBackend('cpu');
+      }
+      await tf.ready();
+
+      detector = await poseDetection.createDetector(
+        poseDetection.SupportedModels.MoveNet,
+        { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+      );
+
+      modelReady = true;
+      setModelState(`listo (${tf.getBackend()})`, 'ok');
+
+      if (stream && !detecting) {
+        detecting = true;
+        detectLoop();
+      }
+    } catch (err) {
+      console.error(err);
+      setModelState(`error: ${err.message}`, 'err');
+    } finally {
+      loadModelBtn.disabled = false;
+    }
+  }
+
+  async function detectLoop() {
+    if (!detecting) return;
+    if (!stream || video.readyState < 2) {
+      requestAnimationFrame(detectLoop);
+      return;
+    }
+    try {
+      latestPoses = await detector.estimatePoses(video, { flipHorizontal: false });
+      detectFrameCount++;
+      const now = performance.now();
+      if (now - lastDetectFpsTime >= 1000) {
+        detectFpsOut.textContent = detectFrameCount.toString();
+        detectFrameCount = 0;
+        lastDetectFpsTime = now;
+      }
+    } catch (err) {
+      console.error('Error en inferencia', err);
+    }
+    requestAnimationFrame(detectLoop);
+  }
+
+  function drawSkeleton(poses) {
+    if (!poses || !poses.length) return;
+    const kp = {};
+    poses[0].keypoints.forEach(p => { kp[p.name] = p; });
+
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#3ddc84';
+    EDGES.forEach(([a, b]) => {
+      const pa = kp[a], pb = kp[b];
+      if (pa && pb && pa.score > MIN_SCORE && pb.score > MIN_SCORE) {
+        ctx.beginPath();
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+        ctx.stroke();
+      }
+    });
+
+    ctx.fillStyle = '#e8f0ea';
+    Object.values(kp).forEach(p => {
+      if (p.score > MIN_SCORE) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  }
+
+  // === Punto de extensión para el paso 3 ===
+  // Aquí ya tenemos los keypoints de cada frame (latestPoses).
+  // Lo siguiente: acumular esta serie de tiempo durante un swing grabado
+  // y calcular ángulos (hombros, caderas, X-factor) + detectar checkpoints.
+  function processFrame() {
+    drawSkeleton(latestPoses);
+  }
+
+  function renderLoop() {
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    processFrame();
+
+    frameCount++;
+    const now = performance.now();
+    if (now - lastFpsTime >= 1000) {
+      fpsOut.textContent = frameCount.toString();
+      frameCount = 0;
+      lastFpsTime = now;
+    }
+
+    rafId = requestAnimationFrame(renderLoop);
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    stream ? stopCamera() : startCamera();
+  });
+
+  cameraSelect.addEventListener('change', () => {
+    if (stream) { stopCamera(); startCamera(); }
+  });
+
+  loadModelBtn.addEventListener('click', loadModel);
+
+  navigator.mediaDevices?.enumerateDevices().then(devices => {
+    const cams = devices.filter(d => d.kind === 'videoinput');
+    if (cams.length > 1) listCameras();
+  });
+</script>
+</body>
+</html>
