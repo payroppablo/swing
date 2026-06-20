@@ -22,6 +22,7 @@ final class AppState: ObservableObject {
     @Published var progress: Double = 0
     @Published var birdieText: String = ""
     @Published var birdieLoading = false
+    @Published var resultsFrom: Screen = .upload   // a dónde vuelve el botón atrás
     let history = HistoryStore()
 
     func analyze(url: URL) {
@@ -33,15 +34,33 @@ final class AppState: ObservableObject {
                 Task { @MainActor in self.progress = p }
             }
             await MainActor.run {
-                if let res = res {
+                if var res = res {
+                    let id = self.history.add(res)
+                    res.recordID = id
                     self.result = res
-                    self.history.add(res)
                     self.birdieText = ""
+                    self.resultsFrom = .home
                     self.screen = .results
                 } else {
                     self.screen = .upload
                 }
             }
         }
+    }
+
+    // Cambiar el bastón si te equivocaste (actualiza el reporte y el historial)
+    func changeClub(_ c: Club) {
+        guard var r = result else { return }
+        r.club = c
+        result = r
+        if let id = r.recordID { history.updateClub(id, c) }
+    }
+
+    // Reabrir un reporte guardado desde Progreso
+    func openSession(_ rec: SessionRecord) {
+        result = rec.toResult()
+        birdieText = ""
+        resultsFrom = .progress
+        screen = .results
     }
 }

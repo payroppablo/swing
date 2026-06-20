@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import UIKit
 
 // Historial de progreso (UserDefaults). En producción esto vive en el servidor.
 final class HistoryStore: ObservableObject {
@@ -15,20 +16,66 @@ final class HistoryStore: ObservableObject {
             sessions = arr
         }
     }
-    func add(_ r: AnalysisResult) {
+    @discardableResult
+    func add(_ r: AnalysisResult) -> UUID {
+        var imgs: [Data] = []
+        if let cp = r.checkpoints {
+            for idx in [cp.address, cp.top, cp.impact, cp.finish] {
+                if r.series.indices.contains(idx), let cg = r.series[idx].image,
+                   let d = UIImage(cgImage: cg).jpegData(compressionQuality: 0.6) {
+                    imgs.append(d)
+                } else { imgs.append(Data()) }
+            }
+        }
         let rec = SessionRecord(
             date: Date(), club: r.club, angle: r.angle, score: r.score,
             headStability: r.headStability, hipRotation: r.hipRotation, tempo: r.tempo,
-            spineRet: r.shape?.spineRet.map { Int($0.rounded()) }, shape: r.shape?.shape
+            followThrough: r.followThrough, setup: r.setup, tempoRatio: r.tempoRatio,
+            hipDeg: r.hipDeg, headMovCm: r.headMovCm, shape: r.shape, checkpointImages: imgs
         )
         sessions.append(rec)
         while sessions.count > 60 { sessions.removeFirst() }
+        persist()
+        return rec.id
+    }
+
+    func updateClub(_ id: UUID, _ club: Club) {
+        if let i = sessions.firstIndex(where: { $0.id == id }) { sessions[i].club = club; persist() }
+    }
+    func delete(_ id: UUID) {
+        sessions.removeAll { $0.id == id }; persist()
+    }
+    private func persist() {
         if let data = try? JSONEncoder().encode(sessions) { UserDefaults.standard.set(data, forKey: key) }
     }
 
     var best: Int { sessions.map { $0.score }.max() ?? 0 }
     var avg: Int { sessions.isEmpty ? 0 : Int(Double(sessions.map { $0.score }.reduce(0,+)) / Double(sessions.count)) }
     var last: Int { sessions.last?.score ?? 0 }
+}
+
+// Reconstruir un AnalysisResult (read-only) desde una sesión guardada, para
+// reabrir el reporte completo desde Progreso.
+extension SessionRecord {
+    func toResult() -> AnalysisResult {
+        var series: [FrameSample] = []
+        for data in checkpointImages {
+            let cg = UIImage(data: data)?.cgImage
+            series.append(FrameSample(t: 0, points: [:], scores: [:],
+                                      shoulderAngle: nil, hipAngle: nil, spineTilt: nil, image: cg))
+        }
+        while series.count < 4 {
+            series.append(FrameSample(t: 0, points: [:], scores: [:],
+                                      shoulderAngle: nil, hipAngle: nil, spineTilt: nil, image: nil))
+        }
+        let cp = Checkpoints(address: 0, top: 1, impact: 2, finish: 3, debug: "")
+        return AnalysisResult(
+            score: score, headStability: headStability, hipRotation: hipRotation,
+            tempo: tempo, followThrough: followThrough, setup: setup,
+            tempoRatio: tempoRatio, hipDeg: hipDeg, headMovCm: headMovCm,
+            club: club, angle: angle, series: series, checkpoints: cp, shape: shape, recordID: id
+        )
+    }
 }
 
 // Llama al backend (Cloudflare Worker) para el análisis de Birdie.

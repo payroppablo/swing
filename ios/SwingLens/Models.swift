@@ -43,7 +43,7 @@ struct Checkpoints {
 }
 
 // Análisis de plano/postura
-struct ShapeInfo {
+struct ShapeInfo: Codable {
     var planeAngle: Int?
     var pathDelta: Int?
     var pathLabel: String?
@@ -69,9 +69,11 @@ struct AnalysisResult {
     var series: [FrameSample]
     var checkpoints: Checkpoints?
     var shape: ShapeInfo?
+    var recordID: UUID? = nil   // id en el historial (para editar/reabrir)
 }
 
-// Registro guardado para el historial de progreso
+// Registro guardado para el historial de progreso. Guarda lo suficiente para
+// REABRIR el reporte completo (incluyendo las 4 fotos de checkpoints en JPEG).
 struct SessionRecord: Codable, Identifiable {
     var id = UUID()
     var date: Date
@@ -81,6 +83,11 @@ struct SessionRecord: Codable, Identifiable {
     var headStability: Int
     var hipRotation: Int
     var tempo: Int
-    var spineRet: Int?
-    var shape: String?
+    var followThrough: Int
+    var setup: Int
+    var tempoRatio: String
+    var hipDeg: Int
+    var headMovCm: Double
+    var shape: ShapeInfo?
+    var checkpointImages: [Data]   // address, top, impact, finish (jpeg)
 }

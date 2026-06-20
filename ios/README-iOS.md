@@ -38,6 +38,20 @@ progreso + Birdie (vía el Cloudflare Worker). La extracción de frames usa
 - En la app: Subir swing → elige ángulo y bastón → elige un video de la galería
   → verás el análisis y el reporte.
 
+## Ícono de la app (verde)
+
+En el repo está `ios/AppIcon-1024.png` (1024×1024).
+1. En Xcode abre **Assets.xcassets** → **AppIcon**.
+2. Arrastra `AppIcon-1024.png` al slot grande (1024 / "Any Appearance").
+   (Xcode 14+ acepta un solo tamaño de 1024 y genera el resto.)
+3. Run: el ícono verde aparece en la pantalla de inicio.
+
+## Cargar un video para probar
+
+- **Simulador:** no trae videos. Arrastra un .mp4/.mov a la ventana del
+  simulador (se guarda en Fotos) y luego elígelo en "Subir swing".
+- **iPhone real:** usa tus propios videos directamente.
+
 ## Qué falta (siguientes milestones)
 
 - Grabar con la cámara dentro de la app (ahora solo galería).
