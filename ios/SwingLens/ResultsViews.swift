@@ -168,7 +168,6 @@ struct ResultsView: View {
 
     func runBirdie(_ r: AnalysisResult) {
         s.birdieLoading = true
-        let labels = ["Address","Top","Impacto","Finish"]
         let idxs = r.checkpoints.map { [$0.address, $0.top, $0.impact, $0.finish] } ?? []
         var images: [String] = []
         for i in idxs {

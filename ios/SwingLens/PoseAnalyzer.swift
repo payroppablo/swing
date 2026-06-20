@@ -75,7 +75,7 @@ struct PoseAnalyzer {
 
         if series.count < 6 { return nil }
 
-        var checkpoints = detectCheckpoints(series)
+        let checkpoints = detectCheckpoints(series)
         // Rellenar imágenes exactas de los 4 checkpoints (native = preciso)
         if let cp = checkpoints {
             for idx in [cp.address, cp.top, cp.impact, cp.finish] {
