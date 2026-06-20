@@ -146,13 +146,13 @@ body{margin:0;background:radial-gradient(130% 120% at 50% -10%,#F4F2EC 0%,#E6E2D
             </div>
             <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5l6 6-6 6" stroke="#08311C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
-          <div onclick="App.goResults()" class="tap" style="display:flex;align-items:center;gap:14px;padding:15px 16px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(8px)">
+          <div onclick="App.goProgress()" class="tap" style="display:flex;align-items:center;gap:14px;padding:15px 16px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(8px)">
             <div style="width:42px;height:42px;border-radius:12px;background:rgba(127,208,138,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="#7FD08A" stroke-width="1.8"/><path d="M12 7.5V12l3 2" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 19V5M4 19h16M8 16l3.5-4 3 2.5L20 8" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <div style="flex:1;min-width:0">
-              <div style="font-size:15.5px;font-weight:600;color:#EAF3EB">Previous Swings</div>
-              <div style="font-size:12px;color:rgba(206,226,209,.6);margin-top:1px">Review your past reports</div>
+              <div style="font-size:15.5px;font-weight:600;color:#EAF3EB">Tu progreso</div>
+              <div style="font-size:12px;color:rgba(206,226,209,.6);margin-top:1px">Historial y evolución de tu score</div>
             </div>
             <svg width="9" height="15" viewBox="0 0 9 15" fill="none"><path d="M1.5 1.5l6 6-6 6" stroke="rgba(206,226,209,.55)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
@@ -193,6 +193,13 @@ body{margin:0;background:radial-gradient(130% 120% at 50% -10%,#F4F2EC 0%,#E6E2D
               Face-on
             </div>
           </div>
+
+          <!-- Club selector -->
+          <div class="angle-toggle" id="club-toggle" style="margin-top:8px">
+            <div class="angle-btn active" data-club="driver" onclick="App.setClub('driver')">Driver</div>
+            <div class="angle-btn" data-club="iron" onclick="App.setClub('iron')">Hierro</div>
+            <div class="angle-btn" data-club="wedge" onclick="App.setClub('wedge')">Wedge</div>
+          </div>
         </div>
 
         <!-- Dropzone -->
@@ -226,7 +233,7 @@ body{margin:0;background:radial-gradient(130% 120% at 50% -10%,#F4F2EC 0%,#E6E2D
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="15" rx="3" stroke="#1B4332" stroke-width="1.8"/><circle cx="8.5" cy="9.5" r="1.7" fill="#1B4332"/><path d="M4 16.5l4.5-3.5 3.5 2.6 3-2 4 3" stroke="#1B4332" stroke-width="1.8" stroke-linejoin="round" fill="none"/></svg>
             Choose from Gallery
           </div>
-          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.2px">Best results: 120fps · steady camera · build 11</div>
+          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.2px">Best results: 120fps · steady camera · build 12</div>
         </div>
       </div>
     </div>
@@ -279,6 +286,13 @@ body{margin:0;background:radial-gradient(130% 120% at 50% -10%,#F4F2EC 0%,#E6E2D
       </div>
     </div>
 
+    <!-- ════════ PROGRESS ════════ -->
+    <div id="screen-progress" class="screen">
+      <div id="progress-content" style="position:relative;width:100%;min-height:100%;box-sizing:border-box;padding:80px 20px 40px;background:#FBFBF8;animation:screenIn .5s ease both">
+        <!-- dynamically rendered -->
+      </div>
+    </div>
+
   </div><!-- /screens -->
 
   <div class="home-indicator"><div class="home-bar" id="home-bar"></div></div>
@@ -304,6 +318,7 @@ const App = (() => {
   let analysisResults = null;
   let analysisAbort = false;
   let activeCheckpoint = 'top';
+  let swingClub = 'driver';
 
   // Backend opcional (Cloudflare Worker). Si lo pones aquí, Birdie usa el
   // proxy seguro (sin pedir API key al usuario). Si queda vacío, usa la key
@@ -330,8 +345,33 @@ const App = (() => {
   function goHome() { analysisAbort = true; showScreen('home'); }
   function goUpload() { showScreen('upload'); }
   function goResults() {
+    if (analysisResults && !analysisResults._saved) { saveToHistory(analysisResults); analysisResults._saved = true; }
     renderResults(analysisResults || DEFAULT);
     showScreen('results');
+  }
+  function goProgress() { renderProgress(); showScreen('progress'); }
+
+  /* ── progress history (localStorage) ── */
+  function loadHistory() {
+    try { return JSON.parse(localStorage.getItem('swinglens_history') || '[]'); } catch (_) { return []; }
+  }
+  function saveToHistory(r) {
+    if (!r || typeof r.score !== 'number') return;
+    const shape = analyzeShape(r.checkpoints, r.vw, r.vh) || {};
+    const hist = loadHistory();
+    hist.push({
+      date: Date.now(),
+      club: r.club || swingClub,
+      angle: r.angle || swingAngle,
+      score: r.score,
+      headStability: r.headStability, hipRotation: r.hipRotation, tempo: r.tempo,
+      followThrough: r.followThrough, setup: r.setup,
+      spineRet: shape.spineRet != null ? Math.round(shape.spineRet) : null,
+      shape: shape.shape || null,
+    });
+    // límite de 60 sesiones
+    while (hist.length > 60) hist.shift();
+    try { localStorage.setItem('swinglens_history', JSON.stringify(hist)); } catch (_) {}
   }
 
   /* ── clock ── */
@@ -341,14 +381,121 @@ const App = (() => {
       now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0');
   }
 
+  /* ── progress screen ── */
+  function fmtDate(ts) {
+    const d = new Date(ts);
+    return d.getDate() + '/' + (d.getMonth() + 1) + ' ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  function renderProgress() {
+    const chrono = loadHistory();
+    const el = document.getElementById('progress-content');
+    const back = `
+      <div style="display:flex;align-items:center;gap:12px;padding:0 4px">
+        <div onclick="App.goHome()" class="tap" style="width:38px;height:38px;border-radius:50%;background:#fff;border:1px solid #ECEAE3;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#1B4332" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="font-size:11px;letter-spacing:3px;color:#4CAF50;text-transform:uppercase;font-weight:600">Tu progreso</div>
+      </div>`;
+
+    if (!chrono.length) {
+      el.innerHTML = back + `
+        <div style="text-align:center;margin-top:80px;color:#9AA39C">
+          <div style="font-family:'Spectral',Georgia,serif;font-size:22px;color:#16201B;margin-bottom:8px">Aún no hay sesiones</div>
+          <div style="font-size:13.5px;line-height:1.5;max-width:260px;margin:0 auto">Analiza tu primer swing y aquí verás cómo evoluciona tu score con el tiempo.</div>
+          <div onclick="App.goUpload()" class="tap" style="display:inline-block;margin-top:22px;padding:14px 28px;border-radius:14px;background:#4CAF50;color:#08311C;font-weight:700">Analizar un swing</div>
+        </div>`;
+      return;
+    }
+
+    const scores = chrono.map(h => h.score);
+    const best = Math.max(...scores);
+    const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    const last = scores[scores.length - 1];
+    const prev = scores.length > 1 ? scores[scores.length - 2] : null;
+    const delta = prev !== null ? last - prev : null;
+
+    // Sparkline SVG
+    const W = 322, H = 120, pad = 14;
+    const mn = Math.min(...scores), mx = Math.max(...scores);
+    const range = (mx - mn) || 1;
+    const n = scores.length;
+    const xFor = i => pad + (n === 1 ? (W - 2 * pad) / 2 : i * (W - 2 * pad) / (n - 1));
+    const yFor = s => H - pad - ((s - mn) / range) * (H - 2 * pad);
+    const pts = scores.map((s, i) => `${xFor(i).toFixed(1)},${yFor(s).toFixed(1)}`).join(' ');
+    const dots = scores.map((s, i) => `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(s).toFixed(1)}" r="3" fill="#4CAF50"/>`).join('');
+    const chart = n === 1
+      ? `<div style="text-align:center;color:#9AA39C;font-size:12px;padding:30px 0">Una sesión registrada — analiza más para ver la tendencia.</div>`
+      : `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block">
+           <polyline points="${pts}" fill="none" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+           ${dots}
+         </svg>`;
+
+    const CLUBL = { driver: 'Driver', iron: 'Hierro', wedge: 'Wedge' };
+    const rows = chrono.slice().reverse().map(h => {
+      const dc = h.club === 'driver' ? '#1B4332' : h.club === 'iron' ? '#3E8F58' : '#C2843B';
+      return `
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#fff;border:1px solid #ECEAE3;border-radius:14px">
+          <div style="width:40px;height:40px;border-radius:11px;background:#F1F2EC;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:'Spectral',Georgia,serif;font-size:18px;font-weight:600;color:#1B4332">${h.score}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:600;color:#16201B"><span style="color:${dc}">${CLUBL[h.club] || h.club}</span> · ${h.angle === 'dtl' ? 'DTL' : 'Face-on'}</div>
+            <div style="font-size:11px;color:#9AA39C;margin-top:2px">${h.shape || '—'}</div>
+          </div>
+          <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:10.5px;color:#B3BBB4;flex-shrink:0">${fmtDate(h.date)}</div>
+        </div>`;
+    }).join('');
+
+    const deltaTxt = delta === null ? '' :
+      `<span style="color:${delta >= 0 ? '#3E8F58' : '#C2843B'};font-weight:700">${delta >= 0 ? '▲ +' : '▼ '}${delta}</span> vs anterior`;
+
+    el.innerHTML = back + `
+      <div style="margin-top:18px;display:flex;gap:10px">
+        <div style="flex:1;background:#fff;border:1px solid #ECEAE3;border-radius:14px;padding:12px;text-align:center">
+          <div style="font-family:'Spectral',Georgia,serif;font-size:26px;font-weight:600;color:#16201B">${last}</div>
+          <div style="font-size:9px;letter-spacing:1px;color:#9AA39C;text-transform:uppercase;margin-top:2px">Último</div>
+        </div>
+        <div style="flex:1;background:#fff;border:1px solid #ECEAE3;border-radius:14px;padding:12px;text-align:center">
+          <div style="font-family:'Spectral',Georgia,serif;font-size:26px;font-weight:600;color:#16201B">${avg}</div>
+          <div style="font-size:9px;letter-spacing:1px;color:#9AA39C;text-transform:uppercase;margin-top:2px">Promedio</div>
+        </div>
+        <div style="flex:1;background:#fff;border:1px solid #ECEAE3;border-radius:14px;padding:12px;text-align:center">
+          <div style="font-family:'Spectral',Georgia,serif;font-size:26px;font-weight:600;color:#3E8F58">${best}</div>
+          <div style="font-size:9px;letter-spacing:1px;color:#9AA39C;text-transform:uppercase;margin-top:2px">Mejor</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600">Evolución del score</div>
+          <div style="font-size:11px;color:#9AA39C">${deltaTxt}</div>
+        </div>
+        <div style="margin-top:12px">${chart}</div>
+      </div>
+      <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600;margin-top:22px;padding-left:4px">Sesiones (${chrono.length})</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-top:12px">${rows}</div>`;
+  }
+
   /* ── angle toggle ── */
   function setAngle(angle) {
     swingAngle = angle;
-    document.querySelectorAll('.angle-btn').forEach(b =>
+    document.querySelectorAll('#angle-toggle .angle-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.angle === angle));
     document.getElementById('angle-label').textContent =
       angle === 'dtl' ? 'down-the-line · tracking' : 'face-on · tracking';
   }
+
+  /* ── club selector ── */
+  function setClub(club) {
+    swingClub = club;
+    document.querySelectorAll('#club-toggle .angle-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.club === club));
+  }
+  const CLUB_LABELS = { driver: 'Driver', iron: 'Hierro', wedge: 'Wedge' };
+  // Referencias ideales aproximadas por bastón (tempo backswing:downswing,
+  // y "ventana" de plano de manos en grados desde la horizontal).
+  const CLUB_REF = {
+    driver: { tempo: '3.0:1', planeLo: 38, planeHi: 50, note: 'barrido, ataque ascendente' },
+    iron:   { tempo: '2.9:1', planeLo: 45, planeHi: 58, note: 'descendente, golpea la bola primero' },
+    wedge:  { tempo: '2.6:1', planeLo: 50, planeHi: 64, note: 'más corto y controlado' },
+  };
 
   /* ── file input ── */
   function handleFile(file) {
@@ -627,7 +774,7 @@ const App = (() => {
     const checkpoints = detectCheckpoints(series);
 
     onProgress(100, 'Finalizing your report');
-    return { ...calcMetrics(rawPoses, vw, vh), checkpoints, series };
+    return { ...calcMetrics(rawPoses, vw, vh), checkpoints, series, vw, vh, club: swingClub, angle: swingAngle };
   }
 
   /* ── draw skeleton ── */
@@ -721,6 +868,57 @@ const App = (() => {
     const mid_h = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
     const angle = Math.atan2(mid_h.y - mid_s.y, mid_h.x - mid_s.x) * (180 / Math.PI);
     return angleDiff(angle, 90);
+  }
+
+  // Mejor muñeca (x,y) por confianza
+  function bestWristXY(kp) {
+    if (!kp) return null;
+    let best = null, bestScore = 0.15;
+    for (const n of ['left_wrist', 'right_wrist']) {
+      const w = kp[n];
+      if (w && w.score > bestScore) { bestScore = w.score; best = { x: w.x, y: w.y }; }
+    }
+    return best;
+  }
+
+  // Análisis de spine angle (postura) y plano/path (de la trayectoria de manos).
+  // Honesto: MoveNet no ve el palo; el path se estima de las muñecas. La cara
+  // del palo no se mide, así que la forma del golpe es TENDENCIA, no certeza.
+  function analyzeShape(checkpoints, vw, vh) {
+    if (!checkpoints) return null;
+    const A = checkpoints.address, T = checkpoints.top, I = checkpoints.impact;
+
+    // Spine: ángulo de la columna en address e impacto, y cuánto se mantiene.
+    const spineAddr = A ? A.spineTilt : null;
+    const spineImp = I ? I.spineTilt : null;
+    const spineRet = (spineAddr !== null && spineImp !== null) ? Math.abs(spineImp - spineAddr) : null;
+    const spineScore = spineRet === null ? null : Math.round(Math.max(30, Math.min(95, 95 - spineRet * 3.2)));
+
+    // Plano de manos: pendiente (grados desde horizontal) del backswing y del
+    // downswing. Si el downswing baja más empinado que subió -> over the top.
+    const wA = A && bestWristXY(A.keypoints), wT = T && bestWristXY(T.keypoints), wI = I && bestWristXY(I.keypoints);
+    let planeAngle = null, pathDelta = null, pathLabel = null, shape = null, shapeNote = null;
+    if (wA && wT && wI) {
+      const ang = (p, q) => Math.abs(Math.atan2(Math.abs(q.y - p.y), Math.abs(q.x - p.x) || 0.0001) * 180 / Math.PI);
+      const back = ang(wA, wT);
+      const down = ang(wT, wI);
+      planeAngle = Math.round(back);
+      pathDelta = Math.round(down - back);
+      if (pathDelta > 8) {
+        pathLabel = 'Over the top · out-to-in';
+        shape = 'Tiende a fade / slice';
+        shapeNote = 'El downswing entra más empinado/por fuera que el backswing.';
+      } else if (pathDelta < -8) {
+        pathLabel = 'Por dentro · in-to-out';
+        shape = 'Tiende a draw / hook';
+        shapeNote = 'El downswing cae por dentro del plano del backswing.';
+      } else {
+        pathLabel = 'On plane · neutral';
+        shape = 'Trayectoria recta';
+        shapeNote = 'Backswing y downswing van por el mismo plano.';
+      }
+    }
+    return { spineAddr, spineImp, spineRet, spineScore, planeAngle, pathDelta, pathLabel, shape, shapeNote };
   }
 
   /* ── checkpoint detection ── */
@@ -1094,13 +1292,20 @@ const App = (() => {
       ];
     });
 
+    const shape = analyzeShape(checkpoints, (analysisResults || {}).vw, (analysisResults || {}).vh) || {};
+    const club = (analysisResults || {}).club || swingClub;
+    const clubRef = CLUB_REF[club] || CLUB_REF.driver;
+    const shapeText = `Club: ${CLUB_LABELS[club]} (ideal: tempo ${clubRef.tempo}, plano manos ${clubRef.planeLo}-${clubRef.planeHi}°, ${clubRef.note}).\n` +
+      `Plano de manos (estimado de muñecas): ${shape.planeAngle != null ? shape.planeAngle + '°' : 'n/d'}; path: ${shape.pathLabel || 'n/d'} (${shape.shape || 'n/d'}); ` +
+      `spine en address: ${shape.spineAddr != null ? Math.round(shape.spineAddr) + '°' : 'n/d'}, cambio de postura address→impacto: ${shape.spineRet != null ? '±' + Math.round(shape.spineRet) + '°' : 'n/d'}.`;
+
     const payload = {
       model: 'claude-sonnet-4-6',
       max_tokens: 900,
       messages: [{
         role: 'user',
         content: [
-          { type: 'text', text: `You are Birdie, a PGA-certified golf instructor reviewing a swing from ${swingAngle === 'dtl' ? 'down-the-line' : 'face-on'} view. Here are 4 checkpoint frames with the pose skeleton overlaid, plus calculated metrics (2D only, treat numbers as approximate — trust the images if they conflict).\n\nMetrics:\n${metricsText}\n\nGive: 2-3 specific strengths, 2-3 concrete improvements, and one focused drill for the most important fix. Tone: direct coach, warm, actionable. In Spanish.` },
+          { type: 'text', text: `You are Birdie, a PGA-certified golf instructor reviewing a swing from ${swingAngle === 'dtl' ? 'down-the-line' : 'face-on'} view. Here are 4 checkpoint frames with the pose skeleton overlaid, plus calculated metrics (2D only, treat numbers as approximate — trust the images if they conflict). Tailor your advice to the club used (a driver swing differs from an iron/wedge).\n\n${shapeText}\n\nCheckpoint metrics:\n${metricsText}\n\nGive: 2-3 specific strengths, 2-3 concrete improvements (mention swing plane / path / spine angle if relevant), and one focused drill for the most important fix. Tone: direct coach, warm, actionable. In Spanish.` },
           ...imageBlocks
         ]
       }]
@@ -1255,6 +1460,46 @@ const App = (() => {
     const headBar = Math.round(Math.max(0, (1 - (r.headMovCm - 1.2) / 5) * 88));
     const tempoBarW = Math.round(Math.min(100, r.tempo));
     const proLabel = swingAngle === 'dtl' ? 'down-the-line' : 'face-on';
+    const club = r.club || swingClub;
+    const clubRef = CLUB_REF[club] || CLUB_REF.driver;
+    const shape = analyzeShape(r.checkpoints, r.vw, r.vh);
+
+    // Tarjeta de plano de swing, path/tendencia y spine angle
+    const planeCard = shape ? `
+      <div style="margin-top:18px;background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:18px 16px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600">Plano · path · postura</div>
+          <div style="font-size:9px;letter-spacing:1px;color:#9A8458;background:#F5EFE0;padding:2px 7px;border-radius:99px;font-weight:700">ESTIMADO</div>
+        </div>
+        ${shape.pathLabel ? `
+        <div style="display:flex;align-items:center;gap:12px;margin-top:14px">
+          <div style="width:44px;height:44px;border-radius:13px;background:${shape.pathDelta > 8 ? '#F6E9DC' : shape.pathDelta < -8 ? '#F6E9DC' : '#EAF6EC'};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 20c4-1 9-4 12-9M16 4l4 1-1 4M4 20l3-1" stroke="${shape.pathDelta > 8 || shape.pathDelta < -8 ? '#C2843B' : '#3E8F58'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14.5px;font-weight:700;color:#16201B">${shape.pathLabel}</div>
+            <div style="font-size:12.5px;color:#6B756F;margin-top:2px;line-height:1.4">${shape.shape} — ${shape.shapeNote}</div>
+          </div>
+        </div>` : '<div style="font-size:12.5px;color:#9AA39C;margin-top:12px">No se pudieron leer bien las manos para el plano. Ajusta los checkpoints arriba.</div>'}
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <div style="flex:1;background:#FBFBF8;border:1px solid #EEF1EA;border-radius:12px;padding:11px;text-align:center">
+            <div style="font-family:'Spectral',Georgia,serif;font-size:20px;font-weight:600;color:#16201B">${shape.planeAngle != null ? shape.planeAngle + '°' : '—'}</div>
+            <div style="font-size:9px;letter-spacing:.5px;color:#9AA39C;text-transform:uppercase;margin-top:2px">Plano manos</div>
+            <div style="font-size:8.5px;color:#B3BBB4;margin-top:1px">ideal ${clubRef.planeLo}–${clubRef.planeHi}°</div>
+          </div>
+          <div style="flex:1;background:#FBFBF8;border:1px solid #EEF1EA;border-radius:12px;padding:11px;text-align:center">
+            <div style="font-family:'Spectral',Georgia,serif;font-size:20px;font-weight:600;color:${shape.spineRet != null && shape.spineRet > 12 ? '#C2843B' : '#3E8F58'}">${shape.spineRet != null ? '±' + Math.round(shape.spineRet) + '°' : '—'}</div>
+            <div style="font-size:9px;letter-spacing:.5px;color:#9AA39C;text-transform:uppercase;margin-top:2px">Postura (cambio)</div>
+            <div style="font-size:8.5px;color:#B3BBB4;margin-top:1px">spine address→impacto</div>
+          </div>
+          <div style="flex:1;background:#FBFBF8;border:1px solid #EEF1EA;border-radius:12px;padding:11px;text-align:center">
+            <div style="font-family:'Spectral',Georgia,serif;font-size:20px;font-weight:600;color:#16201B">${shape.spineAddr != null ? Math.round(shape.spineAddr) + '°' : '—'}</div>
+            <div style="font-size:9px;letter-spacing:.5px;color:#9AA39C;text-transform:uppercase;margin-top:2px">Spine address</div>
+            <div style="font-size:8.5px;color:#B3BBB4;margin-top:1px">inclinación</div>
+          </div>
+        </div>
+        <div style="font-size:10.5px;color:#9AA39C;margin-top:10px;line-height:1.4">Nota: MoveNet no ve el palo. El plano/path se estima de las manos; la forma del golpe es <b>tendencia</b> (la cara del palo no se mide).</div>
+      </div>` : '';
 
     const insightCard = (bg, borderCol, iconHtml, title, desc, badge, badgeColor, scoreNum, scoreLabel) => `
       <div style="display:flex;gap:14px;align-items:flex-start;background:#fff;border:1px solid ${borderCol};border-radius:18px;padding:15px">
@@ -1328,6 +1573,7 @@ const App = (() => {
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#1B4332" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
         <div style="font-size:11px;letter-spacing:3px;color:#4CAF50;text-transform:uppercase;font-weight:600">Swing Report</div>
+        <div style="margin-left:auto;font-size:10.5px;font-weight:700;color:#1B4332;background:#EAF6EC;border:1px solid #CDE7D3;padding:3px 10px;border-radius:99px">${CLUB_LABELS[club] || 'Driver'} · ${proLabel === 'down-the-line' ? 'DTL' : 'Face-on'}</div>
       </div>
 
       <!-- score hero -->
@@ -1355,6 +1601,8 @@ const App = (() => {
         <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600;padding-left:4px;margin-top:10px">Focus areas</div>
         ${focusHtml}
       </div>
+
+      ${planeCard}
 
       <!-- phases -->
       <div style="margin-top:24px;background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:18px 16px">
@@ -1453,7 +1701,7 @@ const App = (() => {
     });
   }
 
-  return { goHome, goUpload, goResults, startAnalysis, startRecording, stopRecording, setAngle, generateFeedback, upgradePro, selectCheckpoint, scrubPreview, commitScrub, stepScrub, init };
+  return { goHome, goUpload, goResults, goProgress, startAnalysis, startRecording, stopRecording, setAngle, setClub, generateFeedback, upgradePro, selectCheckpoint, scrubPreview, commitScrub, stepScrub, init };
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);
