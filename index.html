@@ -226,7 +226,7 @@ body{margin:0;background:radial-gradient(130% 120% at 50% -10%,#F4F2EC 0%,#E6E2D
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="15" rx="3" stroke="#1B4332" stroke-width="1.8"/><circle cx="8.5" cy="9.5" r="1.7" fill="#1B4332"/><path d="M4 16.5l4.5-3.5 3.5 2.6 3-2 4 3" stroke="#1B4332" stroke-width="1.8" stroke-linejoin="round" fill="none"/></svg>
             Choose from Gallery
           </div>
-          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.2px">Best results: 120fps · steady camera · build 6</div>
+          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.2px">Best results: 120fps · steady camera · build 7</div>
         </div>
       </div>
     </div>
@@ -705,19 +705,39 @@ const App = (() => {
     return bestY;
   }
 
-  // Movimiento del cuerpo entero entre dos frames (promedio de desplazamiento
-  // de puntos confiables). Robusto a oclusión de muñecas: aunque las manos se
-  // tapen, hombros/caderas/cabeza siguen marcando el downswing como pico.
+  // Movimiento del cuerpo entero entre dos frames, usando la MEDIANA del
+  // desplazamiento de los puntos confiables. La mediana ignora el salto brusco
+  // de un solo punto (cuando MoveNet confunde/voltea un keypoint un frame), que
+  // con promedio creaba un pico de movimiento falso y anclaba mal el downswing.
   function bodyMotion(kpA, kpB) {
     if (!kpA || !kpB) return null;
     const names = ['left_shoulder','right_shoulder','left_elbow','right_elbow',
       'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','nose'];
-    let sum = 0, c = 0;
+    const ds = [];
     for (const nm of names) {
       const a = kpA[nm], b = kpB[nm];
-      if (a && b && a.score > 0.2 && b.score > 0.2) { sum += Math.hypot(b.x - a.x, b.y - a.y); c++; }
+      if (a && b && a.score > 0.3 && b.score > 0.3) ds.push(Math.hypot(b.x - a.x, b.y - a.y));
     }
-    return c ? sum / c : null;
+    if (!ds.length) return null;
+    ds.sort((x, y) => x - y);
+    return ds[Math.floor(ds.length / 2)];
+  }
+
+  // Sigue la curva desde `start` en dirección `dir` hasta su extremo real
+  // (máximo o mínimo), adaptándose al tempo del swing. `tol` evita que un
+  // bache de ruido detenga la marcha antes de tiempo; devuelve el mejor índice.
+  function walkToExtreme(arr, start, dir, findMax, tol) {
+    let bestI = start, bestV = arr[start];
+    let i = start;
+    while (true) {
+      const next = i + dir;
+      if (next < 0 || next >= arr.length || arr[next] === null) break;
+      const v = arr[next];
+      if (findMax ? v > bestV : v < bestV) { bestV = v; bestI = next; }
+      if (findMax ? (bestV - v > tol) : (v - bestV > tol)) break;
+      i = next;
+    }
+    return bestI;
   }
 
   function interpolateNulls(arr) {
@@ -753,59 +773,45 @@ const App = (() => {
   }
 
   // Detección anclada en el movimiento del cuerpo. El downswing es la parte más
-  // rápida de cualquier swing, en cualquier ángulo de cámara. Desde ese pico
-  // ubicamos los 4 checkpoints por la altura de las manos.
+  // rápida de cualquier swing, en cualquier ángulo. Desde ese pico SEGUIMOS la
+  // curva de altura de manos hasta sus extremos reales (sin ventanas fijas), así
+  // se adapta a cualquier tempo de swing.
   function detectCheckpoints(series) {
     const n = series.length;
     if (n < 6) return null;
     const t = series.map(s => s.t);
     const step = (t[1] - t[0]) || 0.033;
 
-    // 1) Curva de movimiento corporal -> pico = downswing
+    // 1) Curva de movimiento (mediana, suavizada) -> pico = downswing.
+    //    Ignoramos los bordes extremos para evitar ruido de arranque/fin.
     const motion = [null];
     for (let i = 1; i < n; i++) motion.push(bodyMotion(series[i - 1].keypoints, series[i].keypoints));
-    const smMotion = smooth1D(motion, 1);
+    const smMotion = smooth1D(motion, 2);
     let dsIdx = -1, maxM = -Infinity;
-    for (let i = 1; i < n; i++) if (smMotion[i] !== null && smMotion[i] > maxM) { maxM = smMotion[i]; dsIdx = i; }
+    for (let i = 2; i < n - 1; i++) if (smMotion[i] !== null && smMotion[i] > maxM) { maxM = smMotion[i]; dsIdx = i; }
     if (dsIdx < 0) return null;
 
-    // Curva de altura de manos (interpolada + suavizada)
+    // 2) Curva de altura de manos (interpolada + suavizada fuerte)
     const rawY = series.map(s => avgWristY(s.keypoints));
     const haveWrist = rawY.filter(v => v !== null).length >= n * 0.3;
-    const wy = smooth1D(interpolateNulls(rawY), 2);
+    const wy = smooth1D(interpolateNulls(rawY), 3);
+    const yv = wy.filter(v => v !== null);
+    const yRange = yv.length ? (Math.max(...yv) - Math.min(...yv)) : 0;
+    const tol = Math.max(2, yRange * 0.05);
 
-    // 2) Top = manos más altas (Y mínimo) antes del downswing (ventana 0.8s)
-    let topIdx = Math.max(0, dsIdx - Math.round(0.2 / step)), minY = Infinity;
-    if (haveWrist) {
-      for (let i = 0; i < dsIdx; i++) {
-        if (t[dsIdx] - t[i] > 0.8) continue;
-        if (wy[i] !== null && wy[i] < minY) { minY = wy[i]; topIdx = i; }
-      }
-    }
-
-    // 3) Impacto = manos más bajas (Y máximo) justo después del downswing (0.35s)
-    let impactIdx = Math.min(n - 1, dsIdx + Math.round(0.05 / step)), maxY = -Infinity;
-    if (haveWrist) {
-      for (let i = dsIdx; i < n; i++) {
-        if (t[i] - t[dsIdx] > 0.35) break;
-        if (wy[i] !== null && wy[i] > maxY) { maxY = wy[i]; impactIdx = i; }
-      }
-    }
-
-    // 4) Finish = manos más altas (Y mínimo) después del impacto
-    let finishIdx = n - 1, minFy = Infinity;
-    if (haveWrist) {
-      for (let i = impactIdx + 1; i < n; i++) {
-        if (wy[i] !== null && wy[i] < minFy) { minFy = wy[i]; finishIdx = i; }
-      }
-    }
-
-    // 5) Address = manos más bajas (Y máximo) antes del top, o primer frame
-    let addrIdx = 0, maxAy = -Infinity;
-    if (haveWrist) {
-      for (let i = 0; i <= topIdx; i++) {
-        if (wy[i] !== null && wy[i] > maxAy) { maxAy = wy[i]; addrIdx = i; }
-      }
+    let topIdx, impactIdx, finishIdx, addrIdx;
+    if (haveWrist && yRange > 10) {
+      // Seguir la curva desde el pico de movimiento hasta cada extremo real
+      impactIdx = walkToExtreme(wy, dsIdx, +1, true, tol);                       // manos más BAJAS tras el downswing
+      topIdx    = walkToExtreme(wy, dsIdx, -1, false, tol);                      // manos más ALTAS antes del downswing
+      finishIdx = walkToExtreme(wy, Math.min(n - 1, impactIdx + 1), +1, false, tol); // manos ALTAS tras el impacto
+      addrIdx   = walkToExtreme(wy, topIdx, -1, true, tol);                      // manos BAJAS antes del top
+    } else {
+      // Sin muñecas confiables: offsets fijos relativos al pico de movimiento
+      topIdx = Math.max(0, dsIdx - Math.round(0.2 / step));
+      impactIdx = Math.min(n - 1, dsIdx + Math.round(0.08 / step));
+      finishIdx = n - 1;
+      addrIdx = 0;
     }
 
     // Orden estricto: address < top < impacto < finish
@@ -814,10 +820,11 @@ const App = (() => {
 
     const a0 = series[idx[0]], a1 = series[idx[1]];
     const topDelta = (a1.angle !== null && a0.angle !== null) ? angleDiff(a1.angle, a0.angle) : null;
+    const yAt = i => (wy[i] !== null && wy[i] !== undefined) ? Math.round(wy[i]) : '–';
 
     return {
       address: series[idx[0]], top: series[idx[1]], impact: series[idx[2]], finish: series[idx[3]], topDelta,
-      _debug: `addr ${t[idx[0]].toFixed(2)} · top ${t[idx[1]].toFixed(2)} · imp ${t[idx[2]].toFixed(2)} · fin ${t[idx[3]].toFixed(2)} · ds ${t[dsIdx].toFixed(2)} · wrist:${haveWrist ? 'sí' : 'no'} · ${n}f`
+      _debug: `a${t[idx[0]].toFixed(2)}/${yAt(idx[0])} t${t[idx[1]].toFixed(2)}/${yAt(idx[1])} i${t[idx[2]].toFixed(2)}/${yAt(idx[2])} f${t[idx[3]].toFixed(2)}/${yAt(idx[3])} · ds${t[dsIdx].toFixed(2)} w:${haveWrist ? 'y' : 'n'} ${n}f`
     };
   }
 
