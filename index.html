@@ -226,7 +226,7 @@ body{margin:0;background:radial-gradient(130% 120% at 50% -10%,#F4F2EC 0%,#E6E2D
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="15" rx="3" stroke="#1B4332" stroke-width="1.8"/><circle cx="8.5" cy="9.5" r="1.7" fill="#1B4332"/><path d="M4 16.5l4.5-3.5 3.5 2.6 3-2 4 3" stroke="#1B4332" stroke-width="1.8" stroke-linejoin="round" fill="none"/></svg>
             Choose from Gallery
           </div>
-          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.2px">Best results: 120fps · steady camera</div>
+          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.2px">Best results: 120fps · steady camera · build 5</div>
         </div>
       </div>
     </div>
@@ -719,16 +719,17 @@ const App = (() => {
     return best ? { frame: best, delta: bestDelta } : null;
   }
 
-  // Altura promedio de las muñecas (Y de la imagen). Y alto = manos abajo.
-  // Señal confiable en down-the-line Y face-on (no depende del giro de hombros).
+  // Altura de la muñeca MÁS confiable (Y de la imagen). Y alto = manos abajo.
+  // Usamos la de mayor score (no el promedio) y umbral bajo: en down-the-line
+  // una muñeca suele quedar tapada por el cuerpo, así que confiamos en la visible.
   function avgWristY(kp) {
     if (!kp) return null;
-    const ys = [];
+    let bestY = null, bestScore = 0.15;
     for (const n of ['left_wrist', 'right_wrist']) {
       const w = kp[n];
-      if (w && w.score > 0.25) ys.push(w.y);
+      if (w && w.score > bestScore) { bestScore = w.score; bestY = w.y; }
     }
-    return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : null;
+    return bestY;
   }
 
   // Impacto: después del top, el frame donde las manos vuelven a su punto MÁS
