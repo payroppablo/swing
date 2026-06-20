@@ -692,6 +692,7 @@ const App = (() => {
   const MIN_BACKSWING_TIME = 0.5;
   const MIN_DOWNSWING_TIME = 0.15;
   const MAX_DOWNSWING_TIME = 0.6;
+  const MIN_FINISH_GAP = 0.3;
 
   function findAddressFrame(series) {
     const cutoff = 0.5;
@@ -715,18 +716,32 @@ const App = (() => {
     return best ? { frame: best, delta: bestDelta } : null;
   }
 
+  // Altura promedio de las muñecas (Y de la imagen). Y alto = manos abajo.
+  // Señal confiable en down-the-line Y face-on (no depende del giro de hombros).
+  function avgWristY(kp) {
+    if (!kp) return null;
+    const ys = [];
+    for (const n of ['left_wrist', 'right_wrist']) {
+      const w = kp[n];
+      if (w && w.score > 0.25) ys.push(w.y);
+    }
+    return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : null;
+  }
+
+  // Impacto: después del top, el frame donde las manos vuelven a su punto MÁS
+  // BAJO (mayor Y) — es decir, regresan a la bola. En el follow-through las
+  // manos vuelven a subir, así que ese máximo de Y marca el impacto.
   function findImpactFrame(series, address, top) {
     if (!address || !top) return null;
-    const topDelta = angleDiff(top.frame.angle, address.angle);
-    const targetDelta = topDelta * 0.35;
-    let candidate = null;
+    let candidate = null, maxY = -Infinity;
     for (const s of series) {
       const dt = s.t - top.frame.t;
       if (dt < MIN_DOWNSWING_TIME) continue;
       if (dt > MAX_DOWNSWING_TIME) break;
-      if (s.angle === null) continue;
-      if (angleDiff(s.angle, address.angle) <= targetDelta) { candidate = s; break; }
+      const y = avgWristY(s.keypoints);
+      if (y !== null && y > maxY) { maxY = y; candidate = s; }
     }
+    // Respaldo: si no hubo muñecas confiables, vuelve al giro de hombros.
     if (!candidate) {
       let bestDelta = Infinity;
       for (const s of series) {
@@ -740,12 +755,15 @@ const App = (() => {
     return candidate;
   }
 
+  // Finish: forzado a estar al menos MIN_FINISH_GAP después del impacto, donde
+  // el cuerpo se estabiliza (giro de hombros casi sin cambio), o el último frame.
   function findFinishFrame(series, impact) {
     if (!impact) return series[series.length - 1];
-    const impactIdx = series.indexOf(impact);
+    const minT = impact.t + MIN_FINISH_GAP;
     const STABLE_DELTA = 4;
-    for (let i = impactIdx + 2; i < series.length; i++) {
+    for (let i = 1; i < series.length; i++) {
       const a = series[i - 1], b = series[i];
+      if (b.t < minT) continue;
       if (a.angle === null || b.angle === null) continue;
       if (angleDiff(a.angle, b.angle) < STABLE_DELTA) return b;
     }
@@ -963,6 +981,7 @@ const App = (() => {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
           'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-6',
