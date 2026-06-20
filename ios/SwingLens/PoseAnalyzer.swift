@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import Vision
 import CoreGraphics
+import UIKit
 
 // Motor de análisis: extrae frames con AVAssetImageGenerator (exactos en iOS),
 // corre Vision (VNDetectHumanBodyPoseRequest), arma la serie y detecta los 4
@@ -76,12 +77,16 @@ struct PoseAnalyzer {
         if series.count < 6 { return nil }
 
         let checkpoints = detectCheckpoints(series)
-        // Rellenar imágenes exactas de los 4 checkpoints (native = preciso)
+        // Trayectoria de manos a lo largo de todo el swing (para dibujarla encima)
+        let trajectory: [CGPoint] = series.compactMap { bestWristXY($0) }
+        // Rellenar imágenes exactas de los 4 checkpoints CON el esqueleto y la
+        // trayectoria dibujados encima (como en la web).
         if let cp = checkpoints {
             for idx in [cp.address, cp.top, cp.impact, cp.finish] {
                 let cmt = CMTime(seconds: series[idx].t, preferredTimescale: 600)
                 if let cg = try? gen.copyCGImage(at: cmt, actualTime: nil) {
-                    series[idx].image = cg
+                    series[idx].image = renderOverlay(on: cg, points: series[idx].points,
+                                                      scores: series[idx].scores, trajectory: trajectory)
                 }
             }
         }
@@ -96,6 +101,57 @@ struct PoseAnalyzer {
             tempoRatio: metrics.tempoRatio, hipDeg: metrics.hipDeg, headMovCm: metrics.headMovCm,
             club: club, angle: angle, series: series, checkpoints: checkpoints, shape: shape
         )
+    }
+
+    // Conexiones del esqueleto (igual que la web)
+    static let edges: [(String, String)] = [
+        ("left_shoulder","right_shoulder"),
+        ("left_shoulder","left_elbow"), ("left_elbow","left_wrist"),
+        ("right_shoulder","right_elbow"), ("right_elbow","right_wrist"),
+        ("left_shoulder","left_hip"), ("right_shoulder","right_hip"),
+        ("left_hip","right_hip"),
+        ("left_hip","left_knee"), ("left_knee","left_ankle"),
+        ("right_hip","right_knee"), ("right_knee","right_ankle"),
+        ("nose","left_shoulder"), ("nose","right_shoulder"),
+    ]
+
+    // Dibuja la trayectoria de manos + el esqueleto sobre el frame.
+    static func renderOverlay(on cg: CGImage, points: [String: CGPoint],
+                              scores: [String: Double], trajectory: [CGPoint]) -> CGImage {
+        let size = CGSize(width: cg.width, height: cg.height)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let img = renderer.image { rctx in
+            let c = rctx.cgContext
+            UIImage(cgImage: cg).draw(in: CGRect(origin: .zero, size: size))
+            let lw = max(3, size.width / 130)
+
+            // Trayectoria de manos (línea ámbar suave)
+            if trajectory.count > 1 {
+                c.setLineWidth(lw * 0.9)
+                c.setStrokeColor(UIColor(red: 0.76, green: 0.52, blue: 0.23, alpha: 0.85).cgColor)
+                c.setLineCap(.round); c.setLineJoin(.round)
+                c.move(to: trajectory[0])
+                for p in trajectory.dropFirst() { c.addLine(to: p) }
+                c.strokePath()
+            }
+
+            // Esqueleto (verde)
+            c.setLineWidth(lw)
+            c.setStrokeColor(UIColor(red: 0.37, green: 0.88, blue: 0.43, alpha: 1).cgColor)
+            c.setLineCap(.round)
+            for (a, b) in edges {
+                if let pa = points[a], let pb = points[b], (scores[a] ?? 0) > 0.25, (scores[b] ?? 0) > 0.25 {
+                    c.move(to: pa); c.addLine(to: pb); c.strokePath()
+                }
+            }
+            // Articulaciones
+            for (name, p) in points where (scores[name] ?? 0) > 0.25 {
+                let r = max(3.5, size.width / 90)
+                c.setFillColor(UIColor(red: 0.5, green: 0.82, blue: 0.54, alpha: 1).cgColor)
+                c.fillEllipse(in: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2))
+            }
+        }
+        return img.cgImage ?? cg
     }
 
     // ── ángulos ──
