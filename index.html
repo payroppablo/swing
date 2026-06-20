@@ -226,7 +226,7 @@ body{margin:0;background:radial-gradient(130% 120% at 50% -10%,#F4F2EC 0%,#E6E2D
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="15" rx="3" stroke="#1B4332" stroke-width="1.8"/><circle cx="8.5" cy="9.5" r="1.7" fill="#1B4332"/><path d="M4 16.5l4.5-3.5 3.5 2.6 3-2 4 3" stroke="#1B4332" stroke-width="1.8" stroke-linejoin="round" fill="none"/></svg>
             Choose from Gallery
           </div>
-          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.2px">Best results: 120fps · steady camera · build 8</div>
+          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.2px">Best results: 120fps · steady camera · build 9</div>
         </div>
       </div>
     </div>
@@ -303,6 +303,7 @@ const App = (() => {
   let poseDetector = null;
   let analysisResults = null;
   let analysisAbort = false;
+  let activeCheckpoint = 'top';
 
   const DEFAULT = {
     score:78, headStability:62, hipRotation:71, followThrough:68,
@@ -612,7 +613,7 @@ const App = (() => {
     const checkpoints = detectCheckpoints(series);
 
     onProgress(100, 'Finalizing your report');
-    return { ...calcMetrics(rawPoses, vw, vh), checkpoints };
+    return { ...calcMetrics(rawPoses, vw, vh), checkpoints, series };
   }
 
   /* ── draw skeleton ── */
@@ -819,10 +820,16 @@ const App = (() => {
     const t = series.map(s => s.t);
     const step = (t[1] - t[0]) || 0.033;
 
-    // 1) Curva de movimiento (mediana, suavizada) -> pico = downswing.
-    //    Ignoramos los bordes extremos para evitar ruido de arranque/fin.
+    // 1) Curva de VELOCIDAD corporal (mediana / dt, suavizada) -> pico = downswing.
+    //    Dividir por dt es clave: con muestreo por reproducción los frames quedan
+    //    desigualmente espaciados, y sin normalizar un hueco grande parecía un
+    //    "pico de movimiento" falso (por eso el top caía al final del clip).
     const motion = [null];
-    for (let i = 1; i < n; i++) motion.push(bodyMotion(series[i - 1].keypoints, series[i].keypoints));
+    for (let i = 1; i < n; i++) {
+      const d = bodyMotion(series[i - 1].keypoints, series[i].keypoints);
+      const dt = t[i] - t[i - 1];
+      motion.push(d !== null && dt > 0 ? d / dt : null);
+    }
     const smMotion = smooth1D(motion, 2);
     let dsIdx = -1, maxM = -Infinity;
     for (let i = 2; i < n - 1; i++) if (smMotion[i] !== null && smMotion[i] > maxM) { maxM = smMotion[i]; dsIdx = i; }
@@ -1086,18 +1093,43 @@ const App = (() => {
     const accentOf = k => k === 'top' ? '#C2843B' : k === 'impact' ? '#4CAF50' : '#ECEAE3';
     const textOf  = k => k === 'top' ? '#C2843B' : k === 'impact' ? '#4CAF50' : '#9AA39C';
     const addr = checkpoints.address;
+    const series = (analysisResults && analysisResults.series) || [];
 
     const thumbs = ['address','top','impact','finish'].map(key => {
       const cp = checkpoints[key];
       const img = cp && cp.snapshot
         ? `<img src="${cp.snapshot}" style="width:100%;height:100%;object-fit:cover">`
         : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.2);font-size:11px">?</div>`;
+      const active = activeCheckpoint === key;
       return `
-        <div style="flex:1;min-width:0">
-          <div style="aspect-ratio:3/4;border-radius:9px;overflow:hidden;background:#0D241C;border:1.5px solid ${accentOf(key)}">${img}</div>
-          <div style="font-size:9.5px;text-align:center;margin-top:4px;font-weight:${key==='top'||key==='impact'?'700':'400'};color:${textOf(key)}">${LABELS[key]}</div>
+        <div onclick="App.selectCheckpoint('${key}')" class="tap" style="flex:1;min-width:0;cursor:pointer">
+          <div style="aspect-ratio:3/4;border-radius:9px;overflow:hidden;background:#0D241C;border:${active ? '2.5px solid #1B4332' : '1.5px solid ' + accentOf(key)};box-shadow:${active ? '0 0 0 2px rgba(27,67,50,.18)' : 'none'}">${img}</div>
+          <div style="font-size:9.5px;text-align:center;margin-top:4px;font-weight:${active || key==='top' || key==='impact' ? '700' : '400'};color:${active ? '#1B4332' : textOf(key)}">${LABELS[key]}</div>
         </div>`;
     }).join('');
+
+    // Deslizador para ajustar manualmente el checkpoint activo
+    const activeIdx = series.indexOf(checkpoints[activeCheckpoint]);
+    const scrubVal = activeIdx >= 0 ? activeIdx : 0;
+    const previewSnap = (series[scrubVal] && series[scrubVal].snapshot) ||
+      (checkpoints[activeCheckpoint] && checkpoints[activeCheckpoint].snapshot) || '';
+    const curT = series[scrubVal] ? series[scrubVal].t : 0;
+
+    const scrubber = series.length > 1 ? `
+      <div style="margin-top:14px;background:#fff;border:1px solid #ECEAE3;border-radius:14px;padding:14px">
+        <div style="font-size:11px;color:#6B756F;margin-bottom:10px">Ajustar <b style="color:#1B4332">${LABELS[activeCheckpoint]}</b> — toca una foto arriba y desliza al frame correcto</div>
+        <div style="display:flex;justify-content:center">
+          <div style="width:150px;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:#0D241C;border:2px solid #1B4332">
+            <img id="scrub-preview" src="${previewSnap}" style="width:100%;height:100%;object-fit:cover">
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+          <div onclick="App.stepScrub(-1)" class="tap" style="width:34px;height:34px;border-radius:50%;background:#F1F2EC;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;color:#1B4332">‹</div>
+          <input id="scrub-slider" type="range" min="0" max="${series.length - 1}" value="${scrubVal}" oninput="App.scrubPreview(this.value)" onchange="App.commitScrub(this.value)" style="flex:1;accent-color:#4CAF50">
+          <div onclick="App.stepScrub(1)" class="tap" style="width:34px;height:34px;border-radius:50%;background:#F1F2EC;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;color:#1B4332">›</div>
+        </div>
+        <div style="text-align:center;margin-top:6px;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:10.5px;color:#9AA39C"><span id="scrub-time">t=${curT.toFixed(2)}s</span> · frame ${scrubVal + 1}/${series.length}</div>
+      </div>` : '';
 
     const adF = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
     const fmtD = v => v === null || v === undefined ? '<span style="color:#C8D0C8">—</span>' : `${Math.round(v)}°`;
@@ -1124,6 +1156,7 @@ const App = (() => {
         <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600;padding-left:4px">Swing checkpoints</div>
         ${checkpoints._debug ? `<div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:9px;color:#B3BBB4;padding-left:4px;margin-top:4px">${checkpoints._debug}</div>` : ''}
         <div style="display:flex;gap:7px;margin-top:12px">${thumbs}</div>
+        ${scrubber}
         <div style="margin-top:10px;background:#fff;border:1px solid #ECEAE3;border-radius:14px;overflow:hidden">
           <table style="width:100%;border-collapse:collapse">
             <thead>
@@ -1139,6 +1172,37 @@ const App = (() => {
           </table>
         </div>
       </div>`;
+  }
+
+  /* ── manual checkpoint adjustment ── */
+  function renderCheckpoints() {
+    const el = document.getElementById('cp-section');
+    if (el && analysisResults && analysisResults.checkpoints)
+      el.innerHTML = buildCheckpointsHTML(analysisResults.checkpoints);
+  }
+  function selectCheckpoint(key) { activeCheckpoint = key; renderCheckpoints(); }
+  function scrubPreview(v) {
+    const s = analysisResults && analysisResults.series && analysisResults.series[+v];
+    if (!s) return;
+    const img = document.getElementById('scrub-preview');
+    if (img) img.src = s.snapshot;
+    const lbl = document.getElementById('scrub-time');
+    if (lbl) lbl.textContent = 't=' + s.t.toFixed(2) + 's';
+  }
+  function commitScrub(v) {
+    const s = analysisResults && analysisResults.series && analysisResults.series[+v];
+    if (!s) return;
+    analysisResults.checkpoints[activeCheckpoint] = s;
+    renderCheckpoints();
+  }
+  function stepScrub(d) {
+    const slider = document.getElementById('scrub-slider');
+    if (!slider || !analysisResults) return;
+    const max = analysisResults.series.length - 1;
+    const v = Math.max(0, Math.min(max, (+slider.value) + d));
+    slider.value = v;
+    scrubPreview(v);
+    commitScrub(v);
   }
 
   function buildResultsHTML(r, C, off, verdict) {
@@ -1190,7 +1254,7 @@ const App = (() => {
         <div style="font-family:'Spectral',Georgia,serif;font-style:italic;font-size:16.5px;color:#3C463F;margin-top:14px;text-align:center;max-width:280px;line-height:1.4">${verdict}</div>
       </div>
 
-      ${buildCheckpointsHTML(r.checkpoints)}
+      <div id="cp-section">${buildCheckpointsHTML(r.checkpoints)}</div>
 
       <!-- insights -->
       <div style="margin-top:28px;display:flex;flex-direction:column;gap:11px">
@@ -1321,7 +1385,7 @@ const App = (() => {
     });
   }
 
-  return { goHome, goUpload, goResults, startAnalysis, startRecording, stopRecording, setAngle, generateFeedback, init };
+  return { goHome, goUpload, goResults, startAnalysis, startRecording, stopRecording, setAngle, generateFeedback, selectCheckpoint, scrubPreview, commitScrub, stepScrub, init };
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);
