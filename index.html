@@ -226,7 +226,7 @@ body{margin:0;background:radial-gradient(130% 120% at 50% -10%,#F4F2EC 0%,#E6E2D
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="15" rx="3" stroke="#1B4332" stroke-width="1.8"/><circle cx="8.5" cy="9.5" r="1.7" fill="#1B4332"/><path d="M4 16.5l4.5-3.5 3.5 2.6 3-2 4 3" stroke="#1B4332" stroke-width="1.8" stroke-linejoin="round" fill="none"/></svg>
             Choose from Gallery
           </div>
-          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.2px">Best results: 120fps · steady camera · build 7</div>
+          <div style="text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#9AA39C;margin-top:4px;letter-spacing:.2px">Best results: 120fps · steady camera · build 8</div>
         </div>
       </div>
     </div>
@@ -428,14 +428,13 @@ const App = (() => {
       const vid = document.getElementById('analysis-video');
       vid.src = url;
       vid.style.display = 'block';
-      vid.play().catch(()=>{});
       scanLine.style.display = 'none';
       document.getElementById('skeleton-canvas').style.display = 'block';
 
-      const procVid = document.getElementById('proc-video');
-      procVid.src = url;
-
-      runMoveNet(procVid, (pct, msg) => {
+      // Procesamos el video VISIBLE (no uno oculto): requestVideoFrameCallback
+      // solo dispara si el elemento está renderizado. Además se ve el skeleton
+      // en vivo mientras analiza.
+      runMoveNet(vid, (pct, msg) => {
         if (analysisAbort) return;
         progressBar.style.width = pct + '%';
         progressNum.textContent = pct;
@@ -489,6 +488,14 @@ const App = (() => {
     return poseDetector;
   }
 
+  const ANALYSIS_STATUSES = [
+    'Detecting posture & spine angle',
+    'Tracking club path & face angle',
+    'Measuring tempo & balance',
+    'Comparing against tour pros',
+    'Finalizing your report',
+  ];
+
   async function runMoveNet(video, onProgress) {
     const det = await loadDetector();
 
@@ -511,30 +518,20 @@ const App = (() => {
     const octx = oc.getContext('2d');
     oc.width = vw; oc.height = vh;
 
-    const STEP = 1 / 30;
+    // Lienzo chico para guardar la miniatura de cada frame (rápido + ligero)
+    const thumbW = 260, thumbH = Math.max(1, Math.round(vh * thumbW / vw));
+    const tc = document.createElement('canvas');
+    tc.width = thumbW; tc.height = thumbH;
+    const tctx = tc.getContext('2d');
+
     const MAX_DUR = Math.min(duration, 10);
-    const totalFrames = Math.ceil(MAX_DUR / STEP);
     const series = [];
     const rawPoses = [];
-
-    const statuses = [
-      'Detecting posture & spine angle',
-      'Tracking club path & face angle',
-      'Measuring tempo & balance',
-      'Comparing against tour pros',
-      'Finalizing your report',
-    ];
-
-    let t = 0, frameIndex = 0;
     let prevShoulderAngle = null, prevHipAngle = null;
 
-    while (t <= MAX_DUR) {
-      if (analysisAbort) throw new Error('aborted');
-      await seekTo(video, t);
-      if (t > 0 && Math.abs(video.currentTime - t) > STEP * 3) break;
-
+    // Núcleo: analiza el frame actual del video y lo agrega a la serie.
+    async function captureCurrentFrame(t) {
       octx.drawImage(video, 0, 0, vw, vh);
-
       let poses = [];
       try { poses = await det.estimatePoses(video, { flipHorizontal: false }); } catch (_) {}
 
@@ -549,30 +546,70 @@ const App = (() => {
         if (hipAngle !== null) prevHipAngle = hipAngle;
         spineTilt = spineTiltRaw(kp);
         drawPose(skCtx, poses[0], vw, vh, vw, vh);
+        drawNamedPoseOnCtx(octx, kp, vw, vh);
       }
-
-      series.push({ t, angle: shoulderAngle, hipAngle, spineTilt, keypoints: kp });
-
-      frameIndex++;
-      const pct = Math.min(95, Math.round((frameIndex / totalFrames) * 90) + 3);
-      const sidx = pct < 20 ? 0 : pct < 40 ? 1 : pct < 60 ? 2 : pct < 80 ? 3 : 4;
-      onProgress(pct, statuses[sidx]);
-      t += STEP;
+      // Miniatura del frame exacto (con skeleton si lo hubo)
+      tctx.drawImage(oc, 0, 0, thumbW, thumbH);
+      const snapshot = tc.toDataURL('image/jpeg', 0.6);
+      series.push({ t, angle: shoulderAngle, hipAngle, spineTilt, keypoints: kp, snapshot });
     }
 
+    const useRVFC = typeof video.requestVideoFrameCallback === 'function';
+
+    if (useRVFC) {
+      // Camino confiable en iPhone: REPRODUCIR el video y tomar cada frame con
+      // su tiempo real (mediaTime). Evita el seek impreciso de iOS Safari.
+      await new Promise((resolve) => {
+        let done = false;
+        const finish = () => { if (!done) { done = true; try { video.pause(); } catch (_) {} resolve(); } };
+
+        const onFrame = async (now, meta) => {
+          if (analysisAbort) return finish();
+          const t = meta && typeof meta.mediaTime === 'number' ? meta.mediaTime : video.currentTime;
+          if (t > MAX_DUR) return finish();
+          await captureCurrentFrame(t);
+          const pct = Math.min(95, Math.round((t / MAX_DUR) * 92) + 3);
+          const sidx = pct < 20 ? 0 : pct < 40 ? 1 : pct < 60 ? 2 : pct < 80 ? 3 : 4;
+          onProgress(pct, ANALYSIS_STATUSES[sidx]);
+          if (!video.ended && t <= MAX_DUR && !done) video.requestVideoFrameCallback(onFrame);
+          else finish();
+        };
+
+        video.muted = true;
+        video.playsInline = true;
+        try { video.currentTime = 0; } catch (_) {}
+        // Más lento = más frames muestreados por segundo de contenido
+        try { video.playbackRate = 0.7; } catch (_) {}
+        video.onended = finish;
+        video.requestVideoFrameCallback(onFrame);
+        const p = video.play();
+        if (p && p.catch) p.catch(() => finish());
+        // Red de seguridad por si nunca termina
+        setTimeout(finish, Math.max(8000, MAX_DUR * 4000));
+      });
+    }
+
+    // Fallback (o si rVFC dio muy pocos frames): muestreo por seek.
+    if (!useRVFC || series.length < 6) {
+      series.length = 0; rawPoses.length = 0;
+      prevShoulderAngle = null; prevHipAngle = null;
+      const STEP = 1 / 30;
+      let t = 0;
+      while (t <= MAX_DUR) {
+        if (analysisAbort) throw new Error('aborted');
+        await seekTo(video, t);
+        if (t > 0 && Math.abs(video.currentTime - t) > STEP * 3) break;
+        await captureCurrentFrame(t);
+        const pct = Math.min(95, Math.round((t / MAX_DUR) * 92) + 3);
+        const sidx = pct < 20 ? 0 : pct < 40 ? 1 : pct < 60 ? 2 : pct < 80 ? 3 : 4;
+        onProgress(pct, ANALYSIS_STATUSES[sidx]);
+        t += STEP;
+      }
+    }
+
+    // Las miniaturas ya están en cada frame de la serie; los checkpoints
+    // referencian esos mismos objetos, así que su .snapshot ya es correcto.
     const checkpoints = detectCheckpoints(series);
-
-    // Capture skeleton-baked snapshots at checkpoint times
-    if (checkpoints) {
-      for (const key of ['address', 'top', 'impact', 'finish']) {
-        const frame = checkpoints[key];
-        if (!frame) continue;
-        await seekTo(video, frame.t);
-        octx.drawImage(video, 0, 0, vw, vh);
-        if (frame.keypoints) drawNamedPoseOnCtx(octx, frame.keypoints, vw, vh);
-        frame.snapshot = oc.toDataURL('image/jpeg', 0.65);
-      }
-    }
 
     onProgress(100, 'Finalizing your report');
     return { ...calcMetrics(rawPoses, vw, vh), checkpoints };
