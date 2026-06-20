@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 // Historial de progreso (UserDefaults). En producción esto vive en el servidor.
 final class HistoryStore: ObservableObject {
