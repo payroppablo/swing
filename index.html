@@ -281,6 +281,9 @@ body{margin:0;background:radial-gradient(130% 120% at 50% -10%,#F4F2EC 0%,#E6E2D
   <div class="home-indicator"><div class="home-bar" id="home-bar"></div></div>
 </div><!-- /ios-device -->
 
+<!-- offscreen canvas for checkpoint frame capture -->
+<canvas id="off-canvas" style="display:none"></canvas>
+
 <!-- TensorFlow.js + Pose Detection -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
@@ -492,13 +495,24 @@ const App = (() => {
       video.load();
     });
 
-    const duration = video.duration;
+    const duration = await getReliableDuration(video);
     if (!duration || isNaN(duration)) throw new Error('no duration');
 
-    const canvas = document.getElementById('skeleton-canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width  = video.videoWidth  || 296;
-    canvas.height = video.videoHeight || 296;
+    const vw = video.videoWidth || 296, vh = video.videoHeight || 296;
+
+    const skCanvas = document.getElementById('skeleton-canvas');
+    const skCtx = skCanvas.getContext('2d');
+    skCanvas.width = vw; skCanvas.height = vh;
+
+    const oc = document.getElementById('off-canvas');
+    const octx = oc.getContext('2d');
+    oc.width = vw; oc.height = vh;
+
+    const STEP = 1 / 30;
+    const MAX_DUR = Math.min(duration, 10);
+    const totalFrames = Math.ceil(MAX_DUR / STEP);
+    const series = [];
+    const rawPoses = [];
 
     const statuses = [
       'Detecting posture & spine angle',
@@ -508,31 +522,57 @@ const App = (() => {
       'Finalizing your report',
     ];
 
-    const interval = 0.2; // seconds between samples
-    const total = Math.floor(duration / interval);
-    const allPoses = [];
+    let t = 0, frameIndex = 0;
+    let prevShoulderAngle = null, prevHipAngle = null;
 
-    for (let i = 0; i <= total; i++) {
+    while (t <= MAX_DUR) {
       if (analysisAbort) throw new Error('aborted');
-      video.currentTime = i * interval;
-      await new Promise(res => { video.onseeked = res; setTimeout(res, 500); });
+      await seekTo(video, t);
+      if (t > 0 && Math.abs(video.currentTime - t) > STEP * 3) break;
 
-      try {
-        const poses = await det.estimatePoses(video);
-        if (poses && poses[0]) {
-          allPoses.push(poses[0]);
-          drawPose(ctx, poses[0], canvas.width, canvas.height,
-            video.videoWidth || canvas.width, video.videoHeight || canvas.height);
-        }
-      } catch(_) {}
+      octx.drawImage(video, 0, 0, vw, vh);
 
-      const pct = Math.min(95, Math.round((i / total) * 90) + 3);
+      let poses = [];
+      try { poses = await det.estimatePoses(video, { flipHorizontal: false }); } catch (_) {}
+
+      let kp = null, shoulderAngle = null, hipAngle = null, spineTilt = null;
+      if (poses.length) {
+        rawPoses.push(poses[0]);
+        kp = {};
+        poses[0].keypoints.forEach(p => { if (p.name) kp[p.name] = p; });
+        shoulderAngle = correctedAngle(shoulderAngleRaw(kp), prevShoulderAngle);
+        if (shoulderAngle !== null) prevShoulderAngle = shoulderAngle;
+        hipAngle = correctedAngle(hipAngleRaw(kp), prevHipAngle);
+        if (hipAngle !== null) prevHipAngle = hipAngle;
+        spineTilt = spineTiltRaw(kp);
+        drawPose(skCtx, poses[0], vw, vh, vw, vh);
+      }
+
+      series.push({ t, angle: shoulderAngle, hipAngle, spineTilt, keypoints: kp });
+
+      frameIndex++;
+      const pct = Math.min(95, Math.round((frameIndex / totalFrames) * 90) + 3);
       const sidx = pct < 20 ? 0 : pct < 40 ? 1 : pct < 60 ? 2 : pct < 80 ? 3 : 4;
       onProgress(pct, statuses[sidx]);
+      t += STEP;
+    }
+
+    const checkpoints = detectCheckpoints(series);
+
+    // Capture skeleton-baked snapshots at checkpoint times
+    if (checkpoints) {
+      for (const key of ['address', 'top', 'impact', 'finish']) {
+        const frame = checkpoints[key];
+        if (!frame) continue;
+        await seekTo(video, frame.t);
+        octx.drawImage(video, 0, 0, vw, vh);
+        if (frame.keypoints) drawNamedPoseOnCtx(octx, frame.keypoints, vw, vh);
+        frame.snapshot = oc.toDataURL('image/jpeg', 0.65);
+      }
     }
 
     onProgress(100, 'Finalizing your report');
-    return calcMetrics(allPoses, video.videoWidth || 296, video.videoHeight || 296);
+    return { ...calcMetrics(rawPoses, vw, vh), checkpoints };
   }
 
   /* ── draw skeleton ── */
@@ -570,6 +610,155 @@ const App = (() => {
         ctx.fill();
       }
     }
+  }
+
+  /* ── seek helpers ── */
+  function seekTo(videoEl, time) {
+    return new Promise(resolve => {
+      const done = () => { videoEl.removeEventListener('seeked', done); resolve(); };
+      videoEl.addEventListener('seeked', done);
+      videoEl.currentTime = time;
+      setTimeout(() => { videoEl.removeEventListener('seeked', done); resolve(); }, 800);
+    });
+  }
+
+  function getReliableDuration(videoEl) {
+    return new Promise(resolve => {
+      if (isFinite(videoEl.duration) && videoEl.duration > 0) { resolve(videoEl.duration); return; }
+      videoEl.currentTime = Number.MAX_SAFE_INTEGER;
+      const onUpdate = () => {
+        videoEl.ontimeupdate = null;
+        const d = videoEl.duration;
+        videoEl.currentTime = 0;
+        resolve(isFinite(d) && d > 0 ? d : 4);
+      };
+      videoEl.ontimeupdate = onUpdate;
+      setTimeout(() => { videoEl.ontimeupdate = null; resolve(4); }, 3000);
+    });
+  }
+
+  /* ── angle math ── */
+  function angleDiff(a, b) { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; }
+  function flip180(a) { const f = a + 180; return f > 180 ? f - 360 : f; }
+  function correctedAngle(raw, prev) {
+    if (raw === null) return null;
+    if (prev === null) return raw;
+    const alt = flip180(raw);
+    return angleDiff(alt, prev) < angleDiff(raw, prev) ? alt : raw;
+  }
+
+  function shoulderAngleRaw(kp) {
+    const ls = kp['left_shoulder'], rs = kp['right_shoulder'];
+    if (!ls || !rs || ls.score < 0.25 || rs.score < 0.25) return null;
+    return Math.atan2(rs.y - ls.y, rs.x - ls.x) * (180 / Math.PI);
+  }
+  function hipAngleRaw(kp) {
+    const lh = kp['left_hip'], rh = kp['right_hip'];
+    if (!lh || !rh || lh.score < 0.25 || rh.score < 0.25) return null;
+    return Math.atan2(rh.y - lh.y, rh.x - lh.x) * (180 / Math.PI);
+  }
+  function spineTiltRaw(kp) {
+    const ls = kp['left_shoulder'], rs = kp['right_shoulder'];
+    const lh = kp['left_hip'], rh = kp['right_hip'];
+    if (!ls || !rs || !lh || !rh) return null;
+    if ([ls,rs,lh,rh].some(p => p.score < 0.25)) return null;
+    const mid_s = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
+    const mid_h = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
+    const angle = Math.atan2(mid_h.y - mid_s.y, mid_h.x - mid_s.x) * (180 / Math.PI);
+    return angleDiff(angle, 90);
+  }
+
+  /* ── checkpoint detection ── */
+  function wristSpeed(kpA, kpB, dt) {
+    if (!kpA || !kpB || dt <= 0) return null;
+    const speeds = [];
+    ['left_wrist', 'right_wrist'].forEach(n => {
+      const a = kpA[n], b = kpB[n];
+      if (a && b && a.score > 0.25 && b.score > 0.25)
+        speeds.push(Math.hypot(b.x - a.x, b.y - a.y) / dt);
+    });
+    return speeds.length ? speeds.reduce((s,v) => s+v, 0) / speeds.length : null;
+  }
+
+  function smoothVelocity(vel) {
+    const out = vel.slice();
+    for (let i = 1; i < vel.length - 1; i++) {
+      const vals = [vel[i-1], vel[i], vel[i+1]].filter(v => v !== null);
+      if (vals.length) out[i] = vals.reduce((a,b) => a+b, 0) / vals.length;
+    }
+    return out;
+  }
+
+  function detectCheckpoints(series) {
+    const valid = series.filter(s => s.angle !== null);
+    if (!valid.length) return null;
+    const baseline = valid[0].angle;
+    let topFrame = valid[0], bestDelta = 0;
+    valid.forEach(s => { const d = angleDiff(s.angle, baseline); if (d > bestDelta) { bestDelta = d; topFrame = s; } });
+
+    let address = series[0];
+    for (const s of series) {
+      if (s.t >= topFrame.t) break;
+      if (s.angle !== null && s.hipAngle !== null) { address = s; break; }
+    }
+
+    const vel = [null];
+    for (let i = 1; i < series.length; i++)
+      vel.push(wristSpeed(series[i-1].keypoints, series[i].keypoints, series[i].t - series[i-1].t));
+    const smoothVel = smoothVelocity(vel);
+
+    const MIN_DS = 0.15, MAX_DS = 0.6;
+    let impactIdx = -1, peakSpeed = -1;
+    series.forEach((s, i) => {
+      const dt = s.t - topFrame.t;
+      if (dt < MIN_DS || dt > MAX_DS) return;
+      if (smoothVel[i] !== null && smoothVel[i] > peakSpeed) { peakSpeed = smoothVel[i]; impactIdx = i; }
+    });
+    const impact = impactIdx >= 0 ? series[impactIdx] : null;
+
+    let finishIdx = series.length - 1;
+    if (impactIdx >= 0 && peakSpeed > 0) {
+      const threshold = peakSpeed * 0.3;
+      for (let i = impactIdx + 1; i < series.length; i++) {
+        if (smoothVel[i] !== null && smoothVel[i] < threshold) { finishIdx = i; break; }
+      }
+    }
+
+    return { address, top: topFrame, impact, finish: series[finishIdx] };
+  }
+
+  /* ── draw skeleton on named-key kp map (for snapshots) ── */
+  function drawNamedPoseOnCtx(ctx, kp, w, h) {
+    const MIN = 0.25;
+    const EDGES = [
+      ['left_shoulder','right_shoulder'],
+      ['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
+      ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],
+      ['left_shoulder','left_hip'],['right_shoulder','right_hip'],
+      ['left_hip','right_hip'],
+      ['left_hip','left_knee'],['left_knee','left_ankle'],
+      ['right_hip','right_knee'],['right_knee','right_ankle'],
+      ['nose','left_shoulder'],['nose','right_shoulder']
+    ];
+    ctx.shadowColor = 'rgba(95,224,110,.55)';
+    ctx.shadowBlur = 7;
+    ctx.strokeStyle = '#5FE06E';
+    ctx.lineWidth = Math.max(2.5, w / 130);
+    ctx.lineCap = 'round';
+    for (const [a, b] of EDGES) {
+      const pa = kp[a], pb = kp[b];
+      if (pa && pb && pa.score > MIN && pb.score > MIN) {
+        ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+      }
+    }
+    ctx.shadowBlur = 0;
+    Object.values(kp).forEach(p => {
+      if (p.score > MIN) {
+        ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(3.5, w / 90), 0, Math.PI * 2);
+        ctx.fillStyle = p.score > 0.6 ? '#7FD08A' : 'rgba(127,208,138,.65)';
+        ctx.fill();
+      }
+    });
   }
 
   /* ── metric calculation ── */
@@ -678,6 +867,140 @@ const App = (() => {
     document.getElementById('results-content').innerHTML = buildResultsHTML(r, C, off, verdict);
   }
 
+  /* ── AI coach feedback (requires Anthropic API key) ── */
+  async function generateFeedback() {
+    const checkpoints = (analysisResults || {}).checkpoints;
+    if (!checkpoints) return;
+
+    let apiKey = localStorage.getItem('swinglens_key') || '';
+    if (!apiKey) {
+      apiKey = prompt('Enter your Anthropic API key to get coach feedback:');
+      if (!apiKey) return;
+      localStorage.setItem('swinglens_key', apiKey);
+    }
+
+    const btn = document.getElementById('coach-btn');
+    const panel = document.getElementById('coach-panel');
+    btn.textContent = 'Analyzing…';
+    btn.disabled = true;
+    panel.style.display = 'block';
+    panel.textContent = 'Birdie is reviewing your swing…';
+
+    const labels = { address: 'Address', top: 'Top', impact: 'Impact', finish: 'Finish' };
+    const addr = checkpoints.address;
+    const adF = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+    const fmtD = v => v === null || v === undefined ? 'no data' : `${Math.round(v)}°`;
+
+    const metricsText = Object.keys(labels).map(key => {
+      const f = checkpoints[key];
+      if (!f) return `${labels[key]}: no data`;
+      const sd = (f.angle !== null && addr && addr.angle !== null) ? adF(f.angle, addr.angle) : null;
+      const hd = (f.hipAngle !== null && addr && addr.hipAngle !== null) ? adF(f.hipAngle, addr.hipAngle) : null;
+      const xf = (sd !== null && hd !== null) ? sd - hd : null;
+      return `${labels[key]} (t=${f.t.toFixed(2)}s): shoulder=${fmtD(sd)}, hip=${fmtD(hd)}, X-factor=${fmtD(xf)}, spine=${fmtD(f.spineTilt)}`;
+    }).join('\n');
+
+    const imageBlocks = Object.keys(labels).flatMap(key => {
+      const f = checkpoints[key];
+      if (!f || !f.snapshot) return [];
+      return [
+        { type: 'text', text: `Checkpoint: ${labels[key]}` },
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: f.snapshot.split(',')[1] } }
+      ];
+    });
+
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 900,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: `You are Birdie, a PGA-certified golf instructor reviewing a swing from ${swingAngle === 'dtl' ? 'down-the-line' : 'face-on'} view. Here are 4 checkpoint frames with the pose skeleton overlaid, plus calculated metrics (2D only, treat numbers as approximate — trust the images if they conflict).\n\nMetrics:\n${metricsText}\n\nGive: 2-3 specific strengths, 2-3 concrete improvements, and one focused drill for the most important fix. Tone: direct coach, warm, actionable. In Spanish.` },
+              ...imageBlocks
+            ]
+          }]
+        })
+      });
+      const data = await resp.json();
+      if (data.error) { panel.textContent = `Error: ${data.error.message}`; return; }
+      panel.textContent = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+    } catch (err) {
+      panel.textContent = `Connection error: ${err.message}`;
+    } finally {
+      btn.textContent = 'Get Birdie\'s read';
+      btn.disabled = false;
+    }
+  }
+
+  /* ── checkpoint thumbnails + metrics ── */
+  function buildCheckpointsHTML(checkpoints) {
+    if (!checkpoints) return '';
+    const LABELS = { address: 'Address', top: 'Top', impact: 'Impact', finish: 'Finish' };
+    const accentOf = k => k === 'top' ? '#C2843B' : k === 'impact' ? '#4CAF50' : '#ECEAE3';
+    const textOf  = k => k === 'top' ? '#C2843B' : k === 'impact' ? '#4CAF50' : '#9AA39C';
+    const addr = checkpoints.address;
+
+    const thumbs = ['address','top','impact','finish'].map(key => {
+      const cp = checkpoints[key];
+      const img = cp && cp.snapshot
+        ? `<img src="${cp.snapshot}" style="width:100%;height:100%;object-fit:cover">`
+        : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.2);font-size:11px">?</div>`;
+      return `
+        <div style="flex:1;min-width:0">
+          <div style="aspect-ratio:3/4;border-radius:9px;overflow:hidden;background:#0D241C;border:1.5px solid ${accentOf(key)}">${img}</div>
+          <div style="font-size:9.5px;text-align:center;margin-top:4px;font-weight:${key==='top'||key==='impact'?'700':'400'};color:${textOf(key)}">${LABELS[key]}</div>
+        </div>`;
+    }).join('');
+
+    const adF = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+    const fmtD = v => v === null || v === undefined ? '<span style="color:#C8D0C8">—</span>' : `${Math.round(v)}°`;
+
+    const rows = ['address','top','impact','finish'].map(key => {
+      const f = checkpoints[key];
+      if (!f) return `<tr><td style="padding:7px 10px;color:#9AA39C;font-size:10.5px">${LABELS[key]}</td><td colspan="4" style="text-align:center;padding:7px 4px;color:#C8D0C8">—</td></tr>`;
+      const sd = (f.angle !== null && addr && addr.angle !== null) ? adF(f.angle, addr.angle) : null;
+      const hd = (f.hipAngle !== null && addr && addr.hipAngle !== null) ? adF(f.hipAngle, addr.hipAngle) : null;
+      const xf = (sd !== null && hd !== null) ? sd - hd : null;
+      const xfColor = xf !== null ? (xf > 25 ? '#3E8F58' : xf < 10 ? '#C2843B' : '#3C463F') : '#C8D0C8';
+      const mono = `font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px`;
+      return `<tr style="border-bottom:1px solid #ECEAE3">
+        <td style="padding:7px 10px;color:${textOf(key)};font-weight:${key==='top'||key==='impact'?'700':'400'};font-size:10.5px">${LABELS[key]}</td>
+        <td style="padding:7px 5px;text-align:right;${mono};color:#3C463F">${fmtD(sd)}</td>
+        <td style="padding:7px 5px;text-align:right;${mono};color:#3C463F">${fmtD(hd)}</td>
+        <td style="padding:7px 5px;text-align:right;${mono};color:${xfColor}">${fmtD(xf)}</td>
+        <td style="padding:7px 5px;text-align:right;${mono};color:#3C463F">${fmtD(f.spineTilt)}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div style="margin-top:20px">
+        <div style="font-size:11px;letter-spacing:2.5px;color:#9AA39C;text-transform:uppercase;font-weight:600;padding-left:4px">Swing checkpoints</div>
+        <div style="display:flex;gap:7px;margin-top:12px">${thumbs}</div>
+        <div style="margin-top:10px;background:#fff;border:1px solid #ECEAE3;border-radius:14px;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="border-bottom:1px solid #ECEAE3">
+                <th style="padding:7px 10px;text-align:left;font-size:9px;letter-spacing:1px;color:#9AA39C;font-weight:500;text-transform:uppercase"></th>
+                <th style="padding:7px 5px;text-align:right;font-size:9px;letter-spacing:.5px;color:#9AA39C;font-weight:500;text-transform:uppercase">Shoulder</th>
+                <th style="padding:7px 5px;text-align:right;font-size:9px;letter-spacing:.5px;color:#9AA39C;font-weight:500;text-transform:uppercase">Hip</th>
+                <th style="padding:7px 5px;text-align:right;font-size:9px;letter-spacing:.5px;color:#9AA39C;font-weight:500;text-transform:uppercase">X-Factor</th>
+                <th style="padding:7px 5px;text-align:right;font-size:9px;letter-spacing:.5px;color:#9AA39C;font-weight:500;text-transform:uppercase">Spine</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
   function buildResultsHTML(r, C, off, verdict) {
     const hipc = r.hipDeg >= 38 ? '#3E8F58' : '#C2843B';
     const hipBarW = Math.round(Math.min(100, r.hipDeg / 45 * 100));
@@ -726,6 +1049,8 @@ const App = (() => {
         </div>
         <div style="font-family:'Spectral',Georgia,serif;font-style:italic;font-size:16.5px;color:#3C463F;margin-top:14px;text-align:center;max-width:280px;line-height:1.4">${verdict}</div>
       </div>
+
+      ${buildCheckpointsHTML(r.checkpoints)}
 
       <!-- insights -->
       <div style="margin-top:28px;display:flex;flex-direction:column;gap:11px">
@@ -830,7 +1155,16 @@ const App = (() => {
       </div>
 
       <!-- bottom CTA -->
-      <div onclick="App.goHome()" class="tap" style="margin-top:22px;padding:17px;border-radius:15px;background:#4CAF50;color:#08311C;text-align:center;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 8px 22px rgba(76,175,80,.3)">Analyze another swing</div>
+      <!-- coach feedback -->
+      <div style="margin-top:18px">
+        <div id="coach-panel" style="display:none;background:#FBFBF8;border:1px solid #ECEAE3;border-radius:14px;padding:14px 16px;font-size:13px;color:#3C463F;line-height:1.6;white-space:pre-wrap;margin-bottom:12px"></div>
+        <div id="coach-btn" onclick="App.generateFeedback()" class="tap" style="padding:15px;border-radius:15px;background:#1B4332;color:#7FD08A;text-align:center;font-size:15px;font-weight:600;cursor:pointer;border:1.5px solid #2D5C42">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="display:inline;vertical-align:middle;margin-right:6px"><path d="M8 12h8M8 8h5M5 20l1.5-5L4 10a7 7 0 1 1 12.5 4.3" stroke="#7FD08A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Get Birdie's read
+        </div>
+      </div>
+
+      <div onclick="App.goHome()" class="tap" style="margin-top:12px;padding:17px;border-radius:15px;background:#4CAF50;color:#08311C;text-align:center;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 8px 22px rgba(76,175,80,.3)">Analyze another swing</div>
     `;
   }
 
@@ -847,7 +1181,7 @@ const App = (() => {
     });
   }
 
-  return { goHome, goUpload, goResults, startAnalysis, startRecording, stopRecording, setAngle, init };
+  return { goHome, goUpload, goResults, startAnalysis, startRecording, stopRecording, setAngle, generateFeedback, init };
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);
