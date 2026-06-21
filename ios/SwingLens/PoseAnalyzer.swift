@@ -234,9 +234,12 @@ struct PoseAnalyzer {
     // Interpola los huecos donde la muñeca se tapa (común en down-the-line) para
     // que la línea sea continua.
     static func swingPaths(_ series: [FrameSample], checkpoints: Checkpoints?) -> (back: [CGPoint], down: [CGPoint]) {
+        // Suavizado fuerte de X e Y para quitar el "temblor" de Vision y que la
+        // línea salga limpia y legible (en vez de muchos zigzags).
         let rawX: [Double?] = series.map { bestWristXY($0).map { Double($0.x) } }
         let rawY: [Double?] = series.map { bestWristXY($0).map { Double($0.y) } }
-        let X = interpolateNulls(rawX), Y = interpolateNulls(rawY)
+        let X = smooth1D(smooth1D(interpolateNulls(rawX), 2), 2)
+        let Y = smooth1D(smooth1D(interpolateNulls(rawY), 2), 2)
         func pts(_ lo: Int, _ hi: Int) -> [CGPoint] {
             guard lo <= hi else { return [] }
             return (lo...hi).compactMap { i in
