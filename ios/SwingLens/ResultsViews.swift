@@ -62,6 +62,7 @@ struct ResultsView: View {
                                 .background(Color(hex: 0xEAF6EC)).cornerRadius(12)
                         }
                     }
+                    tourCard(r)
                     if let seq = r.sequence { sequenceCard(seq) }
                     if let shape = r.shape { planeCard(shape, club: r.club) }
                     metricsCard(r)
@@ -166,6 +167,101 @@ struct ResultsView: View {
                 .font(.system(size: 12.5)).foregroundColor(Theme.slate).fixedSize(horizontal: false, vertical: true)
             Text("Ideal: Caderas → Hombros → Brazos")
                 .font(Theme.mono(10)).foregroundColor(Color(hex: 0xB3BBB4))
+        }
+        .padding(16).background(Color.white).cornerRadius(18)
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.cardBorder))
+    }
+
+    // ── Comparación vs swing de tour (v1: contra estándar ideal por bastón) ──
+    struct MatchRow: Identifiable { let id = UUID(); let name: String; let your: String; let ideal: String; let score: Int }
+
+    func clamp(_ v: Double) -> Int { Int(max(0, min(100, v))) }
+
+    func tourMatch(_ r: AnalysisResult) -> (overall: Int, rows: [MatchRow]) {
+        var rows: [MatchRow] = []
+
+        // Tempo (ideal 3.0:1)
+        let ratio = Double(r.tempoRatio.split(separator: ":").first.map(String.init) ?? "") ?? 3.0
+        let tempoScore = clamp(100 - abs(ratio - 3.0) * 30)
+        rows.append(MatchRow(name: "Tempo", your: r.tempoRatio, ideal: "3.0:1", score: tempoScore))
+
+        // Secuencia
+        if let seq = r.sequence {
+            rows.append(MatchRow(name: "Secuencia", your: seq.correct ? "Correcta" : "Invertida",
+                                 ideal: "Caderas→Brazos", score: seq.correct ? 100 : 45))
+        }
+        // Plano de manos (ventana por bastón)
+        if let pa = r.shape?.planeAngle {
+            let lo = Double(r.club.planeLo), hi = Double(r.club.planeHi)
+            let s: Double = (Double(pa) >= lo && Double(pa) <= hi) ? 100 :
+                100 - min(Double(pa) - hi, lo - Double(pa)).magnitude * 4
+            rows.append(MatchRow(name: "Plano manos", your: "\(pa)°", ideal: "\(r.club.planeLo)–\(r.club.planeHi)°", score: clamp(s)))
+        }
+        // Postura (cambio de spine address→impacto; menos es mejor)
+        if let ret = r.shape?.spineRet {
+            rows.append(MatchRow(name: "Postura", your: "±\(Int(ret.rounded()))°", ideal: "≤8°", score: clamp(100 - max(0, ret - 6) * 5.5)))
+        }
+        // Cabeza (cm)
+        rows.append(MatchRow(name: "Cabeza", your: "\(r.headMovCm) cm", ideal: "≤2 cm", score: clamp(100 - max(0, r.headMovCm - 1.5) * 16)))
+
+        // X-Factor (separación hombros-caderas en el Top)
+        if let cp = r.checkpoints {
+            let A = r.series[cp.address], T = r.series[cp.top]
+            if let sa = A.shoulderAngle, let ta = T.shoulderAngle, let ha = A.hipAngle, let th = T.hipAngle {
+                let xf = PoseAnalyzer.angleDiff(ta, sa) - PoseAnalyzer.angleDiff(th, ha)
+                let s: Double = (xf >= 20 && xf <= 45) ? 100 : 100 - (xf < 20 ? (20 - xf) : (xf - 45)) * 3
+                rows.append(MatchRow(name: "X-Factor", your: "\(Int(xf.rounded()))°", ideal: "20–45°", score: clamp(s)))
+            }
+        }
+
+        let overall = rows.isEmpty ? 0 : Int((rows.map { Double($0.score) }.reduce(0, +) / Double(rows.count)).rounded())
+        return (overall, rows)
+    }
+
+    func tourCard(_ r: AnalysisResult) -> some View {
+        let m = tourMatch(r)
+        let col = m.overall >= 75 ? Theme.actionGreen : (m.overall >= 55 ? Theme.amber : Color(hex: 0xC2843B))
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("PARECIDO A UN SWING DE TOUR").font(.system(size: 11, weight: .semibold)).tracking(1.5).foregroundColor(Color(hex: 0x9AA39C))
+                Spacer()
+                Text("\(r.club.label)").font(.system(size: 10, weight: .bold)).foregroundColor(Theme.darkGreen)
+            }
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle().stroke(Color(hex: 0xEAEDE5), lineWidth: 9).frame(width: 78, height: 78)
+                    Circle().trim(from: 0, to: CGFloat(m.overall) / 100)
+                        .stroke(col, style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                        .frame(width: 78, height: 78).rotationEffect(.degrees(-90))
+                    VStack(spacing: -2) {
+                        Text("\(m.overall)").font(Theme.serif(26)).foregroundColor(Theme.ink)
+                        Text("%").font(.system(size: 10)).foregroundColor(Theme.slate)
+                    }
+                }
+                Text(m.overall >= 75 ? "Muy cerca de un swing de tour. Pule los detalles de abajo."
+                     : m.overall >= 55 ? "Buen camino. Hay 2-3 cosas que te separan del nivel tour."
+                     : "Tienes margen claro. Enfócate en lo rojo de abajo y verás saltos rápidos.")
+                    .font(.system(size: 13)).foregroundColor(Theme.slate).fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(spacing: 9) {
+                ForEach(m.rows) { row in
+                    VStack(spacing: 4) {
+                        HStack {
+                            Text(row.name).font(.system(size: 12.5, weight: .medium)).foregroundColor(Color(hex: 0x3C463F))
+                            Spacer()
+                            Text("tú \(row.your)").font(.system(size: 11)).foregroundColor(Theme.slate)
+                            Text("· tour \(row.ideal)").font(.system(size: 11)).foregroundColor(Color(hex: 0xB3BBB4))
+                        }
+                        GeometryReader { g in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color(hex: 0xEEF1EA)).frame(height: 6)
+                                Capsule().fill(row.score >= 75 ? Theme.actionGreen : (row.score >= 55 ? Theme.amber : Color(hex: 0xC2843B)))
+                                    .frame(width: g.size.width * CGFloat(row.score) / 100, height: 6)
+                            }
+                        }.frame(height: 6)
+                    }
+                }
+            }
         }
         .padding(16).background(Color.white).cornerRadius(18)
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.cardBorder))
