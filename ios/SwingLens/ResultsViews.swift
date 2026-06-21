@@ -761,6 +761,23 @@ struct ProgressScreen: View {
                 Text("Mantén presionada una sesión para eliminarla.")
                     .font(.system(size: 11)).foregroundColor(Color(hex: 0xB3BBB4))
                     .frame(maxWidth: .infinity, alignment: .center).padding(.top, 4)
+
+                // Datos para mejorar la IA (correcciones de checkpoints)
+                if s.trainingCount > 0 {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("DATOS PARA MEJORAR LA IA").font(.system(size: 10, weight: .bold)).tracking(1.5).foregroundColor(Color(hex: 0x9AA39C))
+                        Text("\(s.trainingCount) correcciones guardadas. Cada vez que ajustas un checkpoint, enseñas al sistema. Expórtalas para entrenar el modelo.")
+                            .font(.system(size: 11.5)).foregroundColor(Theme.slate).fixedSize(horizontal: false, vertical: true)
+                        ShareLink(item: TrainingStore.shared.url) {
+                            HStack { Image(systemName: "square.and.arrow.up"); Text("Exportar datos (\(s.trainingCount))") }
+                                .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.darkGreen)
+                                .frame(maxWidth: .infinity).padding(11)
+                                .background(Color(hex: 0xEAF6EC)).cornerRadius(12)
+                        }
+                    }
+                    .padding(14).background(Color.white).cornerRadius(16)
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.cardBorder)).padding(.top, 8)
+                }
             }.padding(20).padding(.top, 30)
         }.background(Theme.cream.ignoresSafeArea())
     }

@@ -24,6 +24,7 @@ final class AppState: ObservableObject {
     @Published var birdieLoading = false
     @Published var resultsFrom: Screen = .upload   // a dónde vuelve el botón atrás
     @Published var pickedURL: URL?                 // video elegido (para previsualizar/recortar)
+    @Published var trainingCount = TrainingStore.shared.count
     let history = HistoryStore()
 
     // Tras elegir video -> pantalla de vista previa y recorte
@@ -92,5 +93,16 @@ final class AppState: ObservableObject {
         r.shape = PoseAnalyzer.analyzeShape(r.series, checkpoints: cp)
         result = r
         if let id = r.recordID { history.updateCheckpoints(id, r) }
+
+        // Paso 1 ML: guardar la corrección como dato de entrenamiento etiquetado
+        let f = r.series[i]
+        var kp: [String: [Double]] = [:]
+        for (name, p) in f.points { kp[name] = [Double(p.x), Double(p.y), f.scores[name] ?? 0] }
+        if !kp.isEmpty {
+            TrainingStore.shared.add(TrainingSample(
+                date: Date(), club: r.club.rawValue, angle: r.angle.rawValue,
+                checkpoint: which, t: f.t, rotation: r.rotation, source: "corrected", keypoints: kp))
+            trainingCount = TrainingStore.shared.count
+        }
     }
 }

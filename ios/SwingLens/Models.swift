@@ -87,7 +87,7 @@ struct AnalysisResult {
     var videoURL: URL? = nil    // para re-generar frames al ajustar checkpoints
 }
 
-enum AppInfo { static let build = "v2.1" }
+enum AppInfo { static let build = "v2.2" }
 
 // Registro guardado para el historial de progreso. Guarda lo suficiente para
 // REABRIR el reporte completo (incluyendo las 4 fotos de checkpoints en JPEG).
