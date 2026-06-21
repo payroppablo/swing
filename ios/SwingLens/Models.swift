@@ -83,11 +83,12 @@ struct AnalysisResult {
     var detectedFrames: Int = 0     // frames donde Vision encontró cuerpo
     var totalFrames: Int = 0
     var rotation: Int = 0           // rotación aplicada para enderezar el video
+    var validSwing: Bool = true     // false si no se detectó un swing real
     var recordID: UUID? = nil   // id en el historial (para editar/reabrir)
     var videoURL: URL? = nil    // para re-generar frames al ajustar checkpoints
 }
 
-enum AppInfo { static let build = "v2.6" }
+enum AppInfo { static let build = "v2.7" }
 
 // Registro guardado para el historial de progreso. Guarda lo suficiente para
 // REABRIR el reporte completo (incluyendo las 4 fotos de checkpoints en JPEG).

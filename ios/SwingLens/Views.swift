@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import AVFoundation
 import UniformTypeIdentifiers
+import UIKit
 
 // Router
 struct RootView: View {
@@ -109,6 +110,8 @@ struct HomeView: View {
 struct UploadView: View {
     @EnvironmentObject var s: AppState
     @State private var pickerItem: PhotosPickerItem?
+    @State private var showCamera = false
+    @State private var noCameraAlert = false
 
     var body: some View {
         ZStack {
@@ -124,17 +127,35 @@ struct UploadView: View {
                           selection: s.club) { s.club = $0 }
 
                 Spacer()
-                PhotosPicker(selection: $pickerItem, matching: .videos) {
-                    Label("Elegir video del swing", systemImage: "video.fill")
+                Button {
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) { showCamera = true }
+                    else { noCameraAlert = true }
+                } label: {
+                    Label("Grabar swing", systemImage: "camera.fill")
                         .font(.system(size: 16, weight: .bold)).foregroundColor(Color(hex: 0x08311C))
                         .frame(maxWidth: .infinity).padding(17)
                         .background(Theme.actionGreen).cornerRadius(15)
+                        .shadow(color: Theme.actionGreen.opacity(0.3), radius: 10, y: 5)
                 }
-                Text("Mejor resultado: cámara fija · una repetición limpia · build iOS 1")
+                PhotosPicker(selection: $pickerItem, matching: .videos) {
+                    Label("Elegir de la galería", systemImage: "photo.on.rectangle")
+                        .font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.darkGreen)
+                        .frame(maxWidth: .infinity).padding(14)
+                        .background(Color(hex: 0xEAF6EC)).cornerRadius(13)
+                }
+                Text("Mejor resultado: cámara fija · cuerpo completo · una repetición")
                     .font(Theme.mono(11)).foregroundColor(Color(hex: 0x9AA39C))
                     .frame(maxWidth: .infinity, alignment: .center)
             }
             .padding(24)
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { url in s.preparePreview(url) }.ignoresSafeArea()
+        }
+        .alert("Cámara no disponible", isPresented: $noCameraAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Graba solo funciona en un iPhone real. En el simulador, elige un video de la galería.")
         }
         .onChange(of: pickerItem) { item in
             guard let item = item else { return }

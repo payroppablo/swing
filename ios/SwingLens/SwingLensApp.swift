@@ -44,12 +44,15 @@ final class AppState: ObservableObject {
             await MainActor.run {
                 if var res = res {
                     res.videoURL = url
-                    let id = self.history.add(res)
-                    res.recordID = id
+                    // Solo guardamos en historial/datos si fue un swing válido
+                    if res.validSwing {
+                        let id = self.history.add(res)
+                        res.recordID = id
+                        self.saveAutoSamples(res)
+                    }
                     self.result = res
                     self.birdieText = ""
                     self.resultsFrom = .home
-                    self.saveAutoSamples(res)
                     self.screen = .results
                 } else {
                     self.screen = .upload

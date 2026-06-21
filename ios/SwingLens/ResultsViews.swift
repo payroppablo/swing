@@ -51,7 +51,9 @@ struct ResultsView: View {
                         }
                     }
                 }
-                if let r = r {
+                if let r = r, !r.validSwing {
+                    noSwingCard(r)
+                } else if let r = r {
                     scoreHero(r)
                     comparisonStrip(r)
                     checkpointsRow(r)
@@ -90,6 +92,33 @@ struct ResultsView: View {
         score >= 70 ? "Sólido — con mejoras claras por delante." :
         score >= 50 ? "En desarrollo — enfócate en lo básico." :
                       "A trabajar — empieza por tu setup."
+    }
+
+    func noSwingCard(_ r: AnalysisResult) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 44)).foregroundColor(Theme.amber).padding(.top, 40)
+            Text("No detectamos un swing claro").font(Theme.serif(24)).foregroundColor(Theme.ink).multilineTextAlignment(.center)
+            Text("Pose detectada: \(r.detectedFrames)/\(r.totalFrames) frames. No analizamos para no darte datos inventados.")
+                .font(.system(size: 13)).foregroundColor(Theme.slate).multilineTextAlignment(.center)
+            VStack(alignment: .leading, spacing: 8) {
+                tipRow("Graba al golfista de cuerpo completo (pies a cabeza)")
+                tipRow("Cámara fija y buena luz (evita el contraluz fuerte)")
+                tipRow("Que el tramo cubra del address al finish")
+            }
+            .padding(14).swCard().padding(.top, 6)
+            Button { s.screen = .upload } label: {
+                Text("Probar otro video").font(.system(size: 16, weight: .bold))
+                    .foregroundColor(Color(hex: 0x08311C)).frame(maxWidth: .infinity).padding(17)
+                    .background(Theme.actionGreen).cornerRadius(15)
+            }.padding(.top, 8)
+        }
+    }
+    func tipRow(_ t: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark.circle.fill").foregroundColor(Theme.actionGreen).font(.system(size: 15))
+            Text(t).font(.system(size: 13)).foregroundColor(Theme.slate)
+            Spacer(minLength: 0)
+        }
     }
 
     func scoreHero(_ r: AnalysisResult) -> some View {
@@ -512,7 +541,7 @@ struct ResultsView: View {
         let sTitle: String; let sDesc: String; let fTitle: String; let fDesc: String }
 
     func findings(_ r: AnalysisResult) -> [Finding] {
-        [
+        var list: [Finding] = [
             Finding(key: "tempo", score: r.tempo, label: "tempo",
                 sTitle: "Tempo suave y repetible", sDesc: "Tu ratio \(r.tempoRatio) está cerca del estándar 3:1.",
                 fTitle: "Tempo por pulir", fDesc: "Tu ratio \(r.tempoRatio) se aleja del 3:1; la transición va apurada."),
@@ -529,6 +558,14 @@ struct ResultsView: View {
                 sTitle: "Finish balanceado", sDesc: "Mantienes una terminación consistente.",
                 fTitle: "Follow-through inconsistente", fDesc: "La terminación varía; trabaja en sostenerla."),
         ]
+        // Postura / early extension: si te levantas o agachas entre address e impacto
+        if let ret = r.shape?.spineRet {
+            let pScore = clamp(100 - max(0, ret - 6) * 5.5)
+            list.append(Finding(key: "posture", score: pScore, label: "postura",
+                sTitle: "Mantienes la postura", sDesc: "Conservas el ángulo de columna (±\(Int(ret))°).",
+                fTitle: "Pierdes la postura", fDesc: "Cambias ~\(Int(ret))° tu ángulo de columna entre address e impacto (te levantas o te agachas); afecta el contacto."))
+        }
+        return list
     }
 
     func drillFor(_ key: String) -> (String, String, String) {
@@ -537,6 +574,7 @@ struct ResultsView: View {
         case "setup":  return ("Chequeo al espejo", "Frente a un espejo, iguala columna neutra y hombros nivelados antes de cada repe.", "2 series · 8 reps · 4 min")
         case "head":   return ("Cabeza contra la pared", "En address apoya la cabeza en la pared y mantén el contacto en el backswing.", "3 series · 10 reps · 6 min")
         case "hip":    return ("Pump-and-Hold", "Pausa a mitad de bajada y sostén para grabar la secuencia de cadera antes del release.", "3 series · 10 reps · 5 min")
+        case "posture": return ("Glúteo a la pared", "Con los glúteos tocando una pared/silla, haz el swing manteniendo el contacto; impide que te levantes.", "3 series · 10 reps · 6 min")
         default:        return ("Sostén el Finish", "Llega a un finish completo y sostén 3 segundos balanceado en el lado líder.", "3 series · 8 reps · 5 min")
         }
     }
@@ -548,6 +586,7 @@ struct ResultsView: View {
         case "setup":  return "Inclínate desde la cadera (no encorves la espalda), rodillas suaves y peso en el centro del pie."
         case "head":   return "Fija la vista en la bola y mantén la cabeza detrás de ella hasta DESPUÉS del impacto."
         case "hip":    return "Inicia la bajada abriendo la cadera delantera hacia el objetivo ANTES de soltar los brazos."
+        case "posture": return "Mantén la inclinación desde la cadera del address hasta el impacto: no te endereces ni te hundas."
         default:        return "Gira a un finish completo: pecho al objetivo, peso en el pie delantero, y sostenlo 3 segundos."
         }
     }
@@ -558,6 +597,7 @@ struct ResultsView: View {
         case "setup":  return "perfecciona tu setup"
         case "head":   return "más quietud de cabeza"
         case "hip":    return "abre más la cadera"
+        case "posture": return "mantén aún mejor la postura"
         default:        return "un finish más completo"
         }
     }
@@ -568,6 +608,7 @@ struct ResultsView: View {
         case "setup":  return "Espalda recta y libre para girar; brazos colgando justo bajo los hombros."
         case "head":   return "Como si giraras alrededor de un poste fijo que pasa por tu cabeza."
         case "hip":    return "La cadera 'arranca' primero y los brazos llegan después — efecto látigo."
+        case "posture": return "Siente los botones de la camisa apuntando a la bola todo el tiempo; la cabeza no sube."
         default:        return "Termina en equilibrio, como una foto que puedas aguantar sin tambalearte."
         }
     }

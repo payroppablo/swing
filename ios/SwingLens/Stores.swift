@@ -124,11 +124,18 @@ enum BirdieService {
         req.httpBody = data
         do {
             let (respData, _) = try await URLSession.shared.data(for: req)
-            if let obj = try? JSONSerialization.jsonObject(with: respData) as? [String: Any],
-               let contentArr = obj["content"] as? [[String: Any]] {
-                return contentArr.compactMap { $0["text"] as? String }.joined()
+            if let obj = try? JSONSerialization.jsonObject(with: respData) as? [String: Any] {
+                if let contentArr = obj["content"] as? [[String: Any]] {
+                    let text = contentArr.compactMap { $0["text"] as? String }.joined()
+                    if !text.isEmpty { return text }
+                }
+                // Mostrar el error real para diagnosticar
+                if let err = obj["error"] as? [String: Any], let msg = err["message"] as? String {
+                    return "Birdie (error): \(msg)"
+                }
+                return "Respuesta vacía del modelo. Crudo: " + (String(data: respData, encoding: .utf8)?.prefix(300).description ?? "—")
             }
-            return "Sin respuesta del modelo."
+            return "No se pudo leer la respuesta. Crudo: " + (String(data: respData, encoding: .utf8)?.prefix(300).description ?? "—")
         } catch {
             return "Error de conexión: \(error.localizedDescription)"
         }

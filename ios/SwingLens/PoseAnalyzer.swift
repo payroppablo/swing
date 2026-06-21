@@ -123,12 +123,18 @@ struct PoseAnalyzer {
         progress(1.0)
 
         let detected = series.filter { !$0.points.isEmpty }.count
+        // ¿Hubo un swing real? detección decente + manos que viajan (suben y bajan)
+        let wy = series.compactMap { avgWristY($0) }
+        var travel = 0.0
+        if let mn = wy.min(), let mx = wy.max(), vh > 0 { travel = (mx - mn) / Double(vh) }
+        let valid = Double(detected) >= Double(series.count) * 0.4 && travel > 0.10
+
         return AnalysisResult(
             score: metrics.score, headStability: metrics.head, hipRotation: metrics.hip,
             tempo: tempoScore, followThrough: metrics.ft, setup: metrics.setup,
             tempoRatio: tempoRatio, hipDeg: metrics.hipDeg, headMovCm: metrics.headMovCm,
             club: club, angle: angle, series: series, checkpoints: checkpoints, shape: shape, sequence: sequence,
-            detectedFrames: detected, totalFrames: series.count, rotation: rotation
+            detectedFrames: detected, totalFrames: series.count, rotation: rotation, validSwing: valid
         )
     }
 

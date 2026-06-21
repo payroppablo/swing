@@ -90,6 +90,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Para analizar tus videos de swing.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Para grabar tu swing.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Para grabar el video de tu swing.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
@@ -107,6 +109,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Para analizar tus videos de swing.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Para grabar tu swing.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Para grabar el video de tu swing.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
