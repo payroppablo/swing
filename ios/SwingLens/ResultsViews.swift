@@ -52,6 +52,7 @@ struct ResultsView: View {
                 }
                 if let r = r {
                     scoreHero(r)
+                    comparisonStrip(r)
                     checkpointsRow(r)
                     if r.videoURL != nil {
                         Button { showScrub = true } label: {
@@ -61,6 +62,7 @@ struct ResultsView: View {
                                 .background(Color(hex: 0xEAF6EC)).cornerRadius(12)
                         }
                     }
+                    if let seq = r.sequence { sequenceCard(seq) }
                     if let shape = r.shape { planeCard(shape, club: r.club) }
                     metricsCard(r)
                     coachContent(r)
@@ -110,6 +112,63 @@ struct ResultsView: View {
             ringProgress = 0
             withAnimation(.easeOut(duration: 1.1)) { ringProgress = CGFloat(r.score) / 100 }
         }
+    }
+
+    // Comparación contra tu historial (mejor / promedio)
+    @ViewBuilder
+    func comparisonStrip(_ r: AnalysisResult) -> some View {
+        let best = s.history.best
+        let avg = s.history.avg
+        let isRecord = best > 0 && r.score >= best && s.history.sessions.count > 1
+        HStack(spacing: 10) {
+            if isRecord {
+                Label("¡Nuevo récord!", systemImage: "trophy.fill")
+                    .font(.system(size: 12, weight: .bold)).foregroundColor(Color(hex: 0x8A6B2E))
+                    .frame(maxWidth: .infinity).padding(.vertical, 9)
+                    .background(Color(hex: 0xF7F0DE)).cornerRadius(12)
+            } else if best > 0 {
+                miniStat("Tu mejor", "\(best)")
+                miniStat("Promedio", "\(avg)")
+            }
+        }
+    }
+    func miniStat(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 6) {
+            Text(label).font(.system(size: 11)).foregroundColor(Theme.slate)
+            Text(value).font(.system(size: 13, weight: .bold)).foregroundColor(Theme.darkGreen)
+        }
+        .frame(maxWidth: .infinity).padding(.vertical, 9)
+        .background(Color.white).cornerRadius(12).overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.cardBorder))
+    }
+
+    // El "plus": secuencia cinemática (orden de la bajada)
+    func sequenceCard(_ seq: SequenceInfo) -> some View {
+        let chipColor = seq.correct ? Theme.actionGreen : Theme.amber
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("SECUENCIA CINEMÁTICA").font(.system(size: 11, weight: .semibold)).tracking(2).foregroundColor(Color(hex: 0x9AA39C))
+                Spacer()
+                Text(seq.correct ? "✓ Buen orden" : "⚠ Revisar").font(.system(size: 10.5, weight: .bold)).foregroundColor(chipColor)
+            }
+            HStack(spacing: 6) {
+                ForEach(Array(seq.order.enumerated()), id: \.offset) { i, name in
+                    Text(name).font(.system(size: 12.5, weight: .bold)).foregroundColor(.white)
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(i == 0 ? Theme.darkGreen : (i == 1 ? Color(hex: 0x3E8F58) : Theme.actionGreen)).cornerRadius(10)
+                    if i < seq.order.count - 1 {
+                        Image(systemName: "arrow.right").font(.system(size: 11, weight: .bold)).foregroundColor(Color(hex: 0xB3BBB4))
+                    }
+                }
+            }
+            Text(seq.correct
+                 ? "Tus caderas lideran, luego el torso y al final los brazos — así se genera y libera la potencia (efecto látigo). Eso es secuencia de tour."
+                 : "Tus brazos/hombros se adelantan a las caderas, lo que fuga potencia. Haz el drill Pump-and-Hold para que las caderas lideren la bajada.")
+                .font(.system(size: 12.5)).foregroundColor(Theme.slate).fixedSize(horizontal: false, vertical: true)
+            Text("Ideal: Caderas → Hombros → Brazos")
+                .font(Theme.mono(10)).foregroundColor(Color(hex: 0xB3BBB4))
+        }
+        .padding(16).background(Color.white).cornerRadius(18)
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.cardBorder))
     }
 
     func checkpointsRow(_ r: AnalysisResult) -> some View {

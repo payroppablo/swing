@@ -42,6 +42,16 @@ struct Checkpoints {
     var debug: String = ""
 }
 
+// Secuencia cinemática: orden en que alcanzan su máxima velocidad en la bajada
+// (caderas → torso → brazos = secuencia de tour). El "plus" que enseña potencia.
+struct SequenceInfo: Codable {
+    var order: [String]        // p.ej. ["Caderas","Hombros","Brazos"] por tiempo de pico
+    var correct: Bool          // true si caderas≤hombros≤brazos
+    var hipsT: Double          // tiempo del pico relativo al Top (s)
+    var shouldersT: Double
+    var armsT: Double
+}
+
 // Análisis de plano/postura
 struct ShapeInfo: Codable {
     var planeAngle: Int?
@@ -69,6 +79,7 @@ struct AnalysisResult {
     var series: [FrameSample]
     var checkpoints: Checkpoints?
     var shape: ShapeInfo?
+    var sequence: SequenceInfo? = nil
     var recordID: UUID? = nil   // id en el historial (para editar/reabrir)
     var videoURL: URL? = nil    // para re-generar frames al ajustar checkpoints
 }

@@ -92,14 +92,67 @@ struct PoseAnalyzer {
 
         let metrics = calcMetrics(series, vw: Double(vw), vh: Double(vh), angle: angle)
         let shape = analyzeShape(series, checkpoints: checkpoints)
+        let sequence = computeSequence(series, checkpoints: checkpoints)
+
+        // Tempo REAL desde los checkpoints (backswing vs bajada)
+        var tempoRatio = metrics.tempoRatio
+        var tempoScore = metrics.tempo
+        if let cp = checkpoints {
+            let back = series[cp.top].t - series[cp.address].t
+            let down = series[cp.impact].t - series[cp.top].t
+            if back > 0.05, down > 0.05 {
+                let ratio = back / down
+                tempoRatio = String(format: "%.1f:1", ratio)
+                tempoScore = Int(max(40, min(98, 100 - abs(ratio - 3.0) * 18)))
+            }
+        }
         progress(1.0)
 
         return AnalysisResult(
             score: metrics.score, headStability: metrics.head, hipRotation: metrics.hip,
-            tempo: metrics.tempo, followThrough: metrics.ft, setup: metrics.setup,
-            tempoRatio: metrics.tempoRatio, hipDeg: metrics.hipDeg, headMovCm: metrics.headMovCm,
-            club: club, angle: angle, series: series, checkpoints: checkpoints, shape: shape
+            tempo: tempoScore, followThrough: metrics.ft, setup: metrics.setup,
+            tempoRatio: tempoRatio, hipDeg: metrics.hipDeg, headMovCm: metrics.headMovCm,
+            club: club, angle: angle, series: series, checkpoints: checkpoints, shape: shape, sequence: sequence
         )
+    }
+
+    // Secuencia cinemática: momento de máxima velocidad de caderas/hombros/brazos
+    // en la bajada. Timing (no ángulos 3D) -> robusto en 2D.
+    static func computeSequence(_ series: [FrameSample], checkpoints: Checkpoints?) -> SequenceInfo? {
+        guard let cp = checkpoints, series.count > 4 else { return nil }
+        let n = series.count
+        let topT = series[cp.top].t
+        let impT = series[cp.impact].t
+        let lo = topT, hi = impT + 0.12
+
+        // velocidades angulares (caderas, hombros) y lineal (muñecas)
+        var hipV = [Double?](repeating: nil, count: n)
+        var shV = [Double?](repeating: nil, count: n)
+        var wrV = [Double?](repeating: nil, count: n)
+        for i in 1..<n {
+            let dt = series[i].t - series[i-1].t
+            if dt <= 0 { continue }
+            if let a = series[i].hipAngle, let b = series[i-1].hipAngle { hipV[i] = angleDiff(a, b) / dt }
+            if let a = series[i].shoulderAngle, let b = series[i-1].shoulderAngle { shV[i] = angleDiff(a, b) / dt }
+            if let p = bestWristXY(series[i]), let q = bestWristXY(series[i-1]) {
+                wrV[i] = hypot(Double(p.x - q.x), Double(p.y - q.y)) / dt
+            }
+        }
+        let hs = smooth1D(hipV, 1), ss = smooth1D(shV, 1), ws = smooth1D(wrV, 1)
+        func peakT(_ v: [Double?]) -> Double? {
+            var best = -1.0, bt: Double? = nil
+            for i in 0..<n {
+                let t = series[i].t
+                if t < lo || t > hi { continue }
+                if let x = v[i], x > best { best = x; bt = t }
+            }
+            return bt
+        }
+        guard let hT = peakT(hs), let sT = peakT(ss), let wT = peakT(ws) else { return nil }
+        let items = [("Caderas", hT), ("Hombros", sT), ("Brazos", wT)].sorted { $0.1 < $1.1 }
+        let correct = (hT <= sT + 0.02) && (sT <= wT + 0.02)
+        return SequenceInfo(order: items.map { $0.0 }, correct: correct,
+                            hipsT: hT - topT, shouldersT: sT - topT, armsT: wT - topT)
     }
 
     // Conexiones del esqueleto (igual que la web)

@@ -30,13 +30,28 @@ struct HomeView: View {
                            startPoint: .top, endPoint: .bottom).ignoresSafeArea()
             VStack(alignment: .leading, spacing: 16) {
                 Spacer()
-                Text("BIRDIE · YOUR CADDIE")
-                    .font(.system(size: 10, weight: .bold)).tracking(1.5)
-                    .foregroundColor(Theme.lightGreen)
                 Text("SwingLens Golf")
                     .font(Theme.serif(40)).foregroundColor(.white)
-                Text("Sube tu swing y Birdie lee cada detalle.")
-                    .font(.system(size: 15)).foregroundColor(.white.opacity(0.8))
+
+                // Birdie · caddie (ícono placeholder + su frase, estilo web)
+                HStack(alignment: .top, spacing: 12) {
+                    ZStack {
+                        Circle().fill(Theme.lightGreen.opacity(0.18))
+                        Circle().stroke(Theme.lightGreen.opacity(0.5), lineWidth: 1.5)
+                        Image(systemName: "figure.golf").font(.system(size: 26)).foregroundColor(Theme.lightGreen)
+                    }
+                    .frame(width: 56, height: 56)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("BIRDIE · TU CADDIE")
+                            .font(.system(size: 10, weight: .bold)).tracking(1.5).foregroundColor(Theme.lightGreen)
+                        Text("\"Listo cuando quieras — mándame un swing y te leo cada detalle.\"")
+                            .font(.system(size: 14, design: .serif)).italic().foregroundColor(Color(hex: 0xEAF3EB))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(13)
+                    .background(Color.white.opacity(0.09))
+                    .cornerRadius(16)
+                }
                 Spacer()
                 menuButton("Subir swing", subtitle: "Graba o elige de la galería",
                            bg: Theme.actionGreen, fg: Color(hex: 0x08311C)) { s.screen = .upload }
