@@ -77,16 +77,15 @@ struct PoseAnalyzer {
         if series.count < 6 { return nil }
 
         let checkpoints = detectCheckpoints(series)
-        // Trayectoria de manos a lo largo de todo el swing (para dibujarla encima)
-        let trajectory: [CGPoint] = series.compactMap { bestWristXY($0) }
-        // Rellenar imágenes exactas de los 4 checkpoints CON el esqueleto y la
-        // trayectoria dibujados encima (como en la web).
+        // Trayectoria de manos separada en backswing y bajada (2 colores)
+        let paths = swingPaths(series, checkpoints: checkpoints)
         if let cp = checkpoints {
             for idx in [cp.address, cp.top, cp.impact, cp.finish] {
                 let cmt = CMTime(seconds: series[idx].t, preferredTimescale: 600)
                 if let cg = try? gen.copyCGImage(at: cmt, actualTime: nil) {
                     series[idx].image = renderOverlay(on: cg, points: series[idx].points,
-                                                      scores: series[idx].scores, trajectory: trajectory)
+                                                      scores: series[idx].scores,
+                                                      pathBack: paths.back, pathDown: paths.down)
                 }
             }
         }
@@ -115,37 +114,58 @@ struct PoseAnalyzer {
         ("nose","left_shoulder"), ("nose","right_shoulder"),
     ]
 
-    // Dibuja la trayectoria de manos + el esqueleto + línea de plano sobre el frame.
-    static func renderOverlay(on cg: CGImage, points: [String: CGPoint],
-                              scores: [String: Double], trajectory: [CGPoint]) -> CGImage {
+    // Separa la trayectoria de manos en backswing (address→top) y bajada (top→fin).
+    static func swingPaths(_ series: [FrameSample], checkpoints: Checkpoints?) -> (back: [CGPoint], down: [CGPoint]) {
+        guard let cp = checkpoints else {
+            return (series.compactMap { bestWristXY($0) }, [])
+        }
+        let a = max(0, min(cp.address, cp.top))
+        let topI = cp.top
+        let endI = series.count - 1
+        let back = (a...max(a, topI)).compactMap { series.indices.contains($0) ? bestWristXY(series[$0]) : nil }
+        let down = (topI...max(topI, endI)).compactMap { series.indices.contains($0) ? bestWristXY(series[$0]) : nil }
+        return (back, down)
+    }
+
+    // Traza una polilínea SUAVIZADA (curvas por los puntos medios) con glow.
+    private static func smoothStroke(_ c: CGContext, _ pts: [CGPoint], color: UIColor, width: CGFloat) {
+        guard pts.count > 1 else { return }
+        c.saveGState()
+        c.setShadow(offset: .zero, blur: width * 1.4, color: color.withAlphaComponent(0.7).cgColor)
+        c.setStrokeColor(color.cgColor)
+        c.setLineWidth(width)
+        c.setLineCap(.round); c.setLineJoin(.round)
+        let path = CGMutablePath()
+        path.move(to: pts[0])
+        if pts.count == 2 {
+            path.addLine(to: pts[1])
+        } else {
+            for i in 1..<(pts.count - 1) {
+                let mid = CGPoint(x: (pts[i].x + pts[i + 1].x) / 2, y: (pts[i].y + pts[i + 1].y) / 2)
+                path.addQuadCurve(to: mid, control: pts[i])
+            }
+            path.addLine(to: pts[pts.count - 1])
+        }
+        c.addPath(path); c.strokePath()
+        c.restoreGState()
+    }
+
+    // Dibuja la trayectoria (2 colores, suave, con glow) + el esqueleto sobre el frame.
+    static func renderOverlay(on cg: CGImage, points: [String: CGPoint], scores: [String: Double],
+                              pathBack: [CGPoint], pathDown: [CGPoint]) -> CGImage {
         let size = CGSize(width: cg.width, height: cg.height)
         let renderer = UIGraphicsImageRenderer(size: size)
         let img = renderer.image { rctx in
             let c = rctx.cgContext
             UIImage(cgImage: cg).draw(in: CGRect(origin: .zero, size: size))
-            let lw = max(4, size.width / 100)
+            let lw = max(4, size.width / 110)
             let minScore = 0.1
 
-            // Trayectoria de manos (línea ámbar gruesa)
-            if trajectory.count > 1 {
-                c.setLineWidth(lw)
-                c.setStrokeColor(UIColor(red: 0.95, green: 0.62, blue: 0.23, alpha: 0.95).cgColor)
-                c.setLineCap(.round); c.setLineJoin(.round)
-                c.move(to: trajectory[0])
-                for p in trajectory.dropFirst() { c.addLine(to: p) }
-                c.strokePath()
+            // Trayectoria: backswing verde suave, bajada ámbar (más gruesa)
+            smoothStroke(c, pathBack, color: UIColor(red: 0.50, green: 0.82, blue: 0.54, alpha: 0.95), width: lw * 1.1)
+            smoothStroke(c, pathDown, color: UIColor(red: 0.97, green: 0.60, blue: 0.20, alpha: 0.98), width: lw * 1.3)
 
-                // Línea de plano (recta de la primera a la última posición de manos)
-                if let a = trajectory.first, let b = trajectory.last {
-                    c.setLineWidth(max(2, lw * 0.5))
-                    c.setStrokeColor(UIColor(red: 1, green: 1, blue: 1, alpha: 0.55).cgColor)
-                    c.setLineDash(phase: 0, lengths: [lw, lw])
-                    c.move(to: a); c.addLine(to: b); c.strokePath()
-                    c.setLineDash(phase: 0, lengths: [])
-                }
-            }
-
-            // Esqueleto (verde brillante) — umbral bajo para que casi siempre dibuje
+            // Esqueleto (verde brillante)
             c.setLineWidth(lw)
             c.setStrokeColor(UIColor(red: 0.37, green: 0.92, blue: 0.45, alpha: 1).cgColor)
             c.setLineCap(.round)
@@ -154,9 +174,8 @@ struct PoseAnalyzer {
                     c.move(to: pa); c.addLine(to: pb); c.strokePath()
                 }
             }
-            // Articulaciones
             for (name, p) in points where (scores[name] ?? 0) > minScore {
-                let r = max(4, size.width / 80)
+                let r = max(4, size.width / 85)
                 c.setFillColor(UIColor(red: 0.55, green: 0.86, blue: 0.58, alpha: 1).cgColor)
                 c.fillEllipse(in: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2))
             }

@@ -24,6 +24,7 @@ struct Movie: Transferable {
 struct ResultsView: View {
     @EnvironmentObject var s: AppState
     @State private var showScrub = false
+    @State private var ringProgress: CGFloat = 0
     var r: AnalysisResult? { s.result }
 
     var body: some View {
@@ -79,37 +80,58 @@ struct ResultsView: View {
         .sheet(isPresented: $showScrub) { ScrubView() }
     }
 
+    func verdict(_ score: Int) -> String {
+        score >= 85 ? "Excelente — fundamentos de nivel tour." :
+        score >= 70 ? "Sólido — con mejoras claras por delante." :
+        score >= 50 ? "En desarrollo — enfócate en lo básico." :
+                      "A trabajar — empieza por tu setup."
+    }
+
     func scoreHero(_ r: AnalysisResult) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             ZStack {
-                Circle().stroke(Color(hex: 0xEAEDE5), lineWidth: 13).frame(width: 150, height: 150)
-                Circle().trim(from: 0, to: CGFloat(r.score)/100)
-                    .stroke(Theme.actionGreen, style: StrokeStyle(lineWidth: 13, lineCap: .round))
-                    .frame(width: 150, height: 150).rotationEffect(.degrees(-90))
+                Circle().stroke(Color(hex: 0xEAEDE5), lineWidth: 13).frame(width: 160, height: 160)
+                Circle().trim(from: 0, to: ringProgress)
+                    .stroke(LinearGradient(colors: [Theme.actionGreen, Theme.lightGreen], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            style: StrokeStyle(lineWidth: 13, lineCap: .round))
+                    .frame(width: 160, height: 160).rotationEffect(.degrees(-90))
+                    .shadow(color: Theme.actionGreen.opacity(0.35), radius: 8)
                 VStack(spacing: 0) {
-                    Text("\(r.score)").font(Theme.serif(50)).foregroundColor(Theme.ink)
-                    Text("SWING SCORE").font(.system(size: 9, weight: .medium)).tracking(2).foregroundColor(Color(hex: 0x9AA39C))
+                    Text("\(r.score)").font(Theme.serif(54)).foregroundColor(Theme.ink)
+                    Text("SWING SCORE").font(.system(size: 9, weight: .medium)).tracking(2.5).foregroundColor(Color(hex: 0x9AA39C))
                 }
             }
-        }.frame(maxWidth: .infinity)
+            Text(verdict(r.score)).font(.system(size: 16, design: .serif)).italic()
+                .foregroundColor(Color(hex: 0x3C463F)).multilineTextAlignment(.center)
+                .frame(maxWidth: 280)
+        }
+        .frame(maxWidth: .infinity)
+        .onAppear {
+            ringProgress = 0
+            withAnimation(.easeOut(duration: 1.1)) { ringProgress = CGFloat(r.score) / 100 }
+        }
     }
 
     func checkpointsRow(_ r: AnalysisResult) -> some View {
         let labels = ["Address", "Top", "Impacto", "Finish"]
+        let colors: [Color] = [Color(hex: 0x6B756F), Theme.amber, Theme.actionGreen, Color(hex: 0x6B756F)]
         let idxs: [Int] = r.checkpoints.map { [$0.address, $0.top, $0.impact, $0.finish] } ?? []
         return VStack(alignment: .leading, spacing: 8) {
             Text("SWING CHECKPOINTS").font(.system(size: 11, weight: .semibold)).tracking(2.5).foregroundColor(Color(hex: 0x9AA39C))
-            if let dbg = r.checkpoints?.debug { Text(dbg).font(Theme.mono(9)).foregroundColor(Color(hex: 0xB3BBB4)) }
             HStack(spacing: 7) {
                 ForEach(0..<idxs.count, id: \.self) { i in
                     VStack(spacing: 4) {
-                        if let cg = r.series[idxs[i]].image {
-                            Image(uiImage: UIImage(cgImage: cg)).resizable().scaledToFill()
-                                .frame(height: 110).frame(maxWidth: .infinity).clipped().cornerRadius(9)
-                        } else {
-                            Rectangle().fill(Color(hex: 0x0D241C)).frame(height: 110).cornerRadius(9)
+                        ZStack {
+                            if let cg = r.series[idxs[i]].image {
+                                Image(uiImage: UIImage(cgImage: cg)).resizable().scaledToFill()
+                                    .frame(height: 116).frame(maxWidth: .infinity).clipped()
+                            } else {
+                                Rectangle().fill(Color(hex: 0x0D241C)).frame(height: 116)
+                            }
                         }
-                        Text(labels[i]).font(.system(size: 9.5, weight: .semibold)).foregroundColor(Color(hex: 0x6B756F))
+                        .cornerRadius(10)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(colors[i], lineWidth: i == 1 || i == 2 ? 2 : 1))
+                        Text(labels[i]).font(.system(size: 9.5, weight: i == 1 || i == 2 ? .bold : .semibold)).foregroundColor(colors[i])
                     }
                 }
             }
@@ -453,7 +475,7 @@ struct ScrubView: View {
     func loadPreview(_ i: Int) async {
         guard let url = s.result?.videoURL, series.indices.contains(i) else { return }
         let frame = series[i]
-        let traj = series.compactMap { PoseAnalyzer.bestWristXY($0) }
+        let paths = PoseAnalyzer.swingPaths(series, checkpoints: s.result?.checkpoints)
         let ui: UIImage? = await Task.detached {
             let asset = AVURLAsset(url: url)
             let gen = AVAssetImageGenerator(asset: asset)
@@ -463,7 +485,8 @@ struct ScrubView: View {
             gen.maximumSize = CGSize(width: 640, height: 640)
             let t = CMTime(seconds: frame.t, preferredTimescale: 600)
             guard let cg = try? gen.copyCGImage(at: t, actualTime: nil) else { return nil }
-            let ov = PoseAnalyzer.renderOverlay(on: cg, points: frame.points, scores: frame.scores, trajectory: traj)
+            let ov = PoseAnalyzer.renderOverlay(on: cg, points: frame.points, scores: frame.scores,
+                                                pathBack: paths.back, pathDown: paths.down)
             return UIImage(cgImage: ov)
         }.value
         if let ui = ui { preview = ui }
