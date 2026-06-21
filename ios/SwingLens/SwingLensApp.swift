@@ -35,6 +35,7 @@ final class AppState: ObservableObject {
             }
             await MainActor.run {
                 if var res = res {
+                    res.videoURL = url
                     let id = self.history.add(res)
                     res.recordID = id
                     self.result = res
@@ -62,5 +63,21 @@ final class AppState: ObservableObject {
         birdieText = ""
         resultsFrom = .progress
         screen = .results
+    }
+
+    // Ajuste manual de un checkpoint (desde el scrubber)
+    func updateCheckpoint(_ which: String, index i: Int, image: CGImage?) {
+        guard var r = result, var cp = r.checkpoints, r.series.indices.contains(i) else { return }
+        switch which {
+        case "address": cp.address = i
+        case "top":     cp.top = i
+        case "impact":  cp.impact = i
+        default:        cp.finish = i
+        }
+        if let img = image { r.series[i].image = img }
+        r.checkpoints = cp
+        r.shape = PoseAnalyzer.analyzeShape(r.series, checkpoints: cp)
+        result = r
+        if let id = r.recordID { history.updateCheckpoints(id, r) }
     }
 }

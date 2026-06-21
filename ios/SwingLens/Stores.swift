@@ -42,6 +42,20 @@ final class HistoryStore: ObservableObject {
     func updateClub(_ id: UUID, _ club: Club) {
         if let i = sessions.firstIndex(where: { $0.id == id }) { sessions[i].club = club; persist() }
     }
+    func updateCheckpoints(_ id: UUID, _ r: AnalysisResult) {
+        guard let i = sessions.firstIndex(where: { $0.id == id }) else { return }
+        var imgs: [Data] = []
+        if let cp = r.checkpoints {
+            for idx in [cp.address, cp.top, cp.impact, cp.finish] {
+                if r.series.indices.contains(idx), let cg = r.series[idx].image,
+                   let d = UIImage(cgImage: cg).jpegData(compressionQuality: 0.6) { imgs.append(d) }
+                else { imgs.append(Data()) }
+            }
+        }
+        sessions[i].checkpointImages = imgs
+        sessions[i].shape = r.shape
+        persist()
+    }
     func delete(_ id: UUID) {
         sessions.removeAll { $0.id == id }; persist()
     }

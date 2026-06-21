@@ -23,6 +23,7 @@ struct Movie: Transferable {
 // ── RESULTS ──
 struct ResultsView: View {
     @EnvironmentObject var s: AppState
+    @State private var showScrub = false
     var r: AnalysisResult? { s.result }
 
     var body: some View {
@@ -51,6 +52,14 @@ struct ResultsView: View {
                 if let r = r {
                     scoreHero(r)
                     checkpointsRow(r)
+                    if r.videoURL != nil {
+                        Button { showScrub = true } label: {
+                            HStack { Image(systemName: "slider.horizontal.3"); Text("Ajustar Top / Impacto…") }
+                                .font(.system(size: 13.5, weight: .semibold)).foregroundColor(Theme.darkGreen)
+                                .frame(maxWidth: .infinity).padding(11)
+                                .background(Color(hex: 0xEAF6EC)).cornerRadius(12)
+                        }
+                    }
                     if let shape = r.shape { planeCard(shape, club: r.club) }
                     metricsCard(r)
                     coachContent(r)
@@ -67,6 +76,7 @@ struct ResultsView: View {
             .padding(20).padding(.top, 30)
         }
         .background(Theme.cream.ignoresSafeArea())
+        .sheet(isPresented: $showScrub) { ScrubView() }
     }
 
     func scoreHero(_ r: AnalysisResult) -> some View {
@@ -364,6 +374,91 @@ struct TrendChart: View {
                     if i == 0 { p.move(to: CGPoint(x: x, y: y)) } else { p.addLine(to: CGPoint(x: x, y: y)) }
                 }
             }.stroke(Theme.actionGreen, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+        }
+    }
+}
+
+// ── Ajuste manual de checkpoints (scrubber) ──
+struct ScrubView: View {
+    @EnvironmentObject var s: AppState
+    @Environment(\.dismiss) var dismiss
+    @State private var idx: Int = 0
+    @State private var preview: UIImage?
+    @State private var target: String = "top"
+
+    var series: [FrameSample] { s.result?.series ?? [] }
+    let targets = [("address","Address"),("top","Top"),("impact","Impacto"),("finish","Finish")]
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Text("Ajustar checkpoints").font(Theme.serif(20)).foregroundColor(Theme.ink).padding(.top, 8)
+            Picker("", selection: $target) {
+                ForEach(targets, id: \.0) { Text($0.1).tag($0.0) }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: target) { _ in idx = currentIndex(); regen() }
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 14).fill(Color.black)
+                if let p = preview {
+                    Image(uiImage: p).resizable().scaledToFit()
+                }
+            }
+            .frame(height: 360).cornerRadius(14)
+
+            HStack(spacing: 10) {
+                Button { step(-1) } label: { Image(systemName: "chevron.left").frame(width: 38, height: 38).background(Color(hex: 0xF1F2EC)).clipShape(Circle()) }
+                Slider(value: Binding(get: { Double(idx) }, set: { idx = Int($0.rounded()); regen() }),
+                       in: 0...Double(max(1, series.count - 1)))
+                .tint(Theme.actionGreen)
+                Button { step(1) } label: { Image(systemName: "chevron.right").frame(width: 38, height: 38).background(Color(hex: 0xF1F2EC)).clipShape(Circle()) }
+            }
+            Text("frame \(idx + 1)/\(series.count) · t=\(String(format: "%.2f", series.indices.contains(idx) ? series[idx].t : 0))s")
+                .font(Theme.mono(11)).foregroundColor(Theme.slate)
+
+            Button {
+                s.updateCheckpoint(target, index: idx, image: preview?.cgImage)
+                dismiss()
+            } label: {
+                Text("Fijar \(label(target)) en este frame").font(.system(size: 15, weight: .bold))
+                    .foregroundColor(Color(hex: 0x08311C)).frame(maxWidth: .infinity).padding(15)
+                    .background(Theme.actionGreen).cornerRadius(13)
+            }
+            Button("Cancelar") { dismiss() }.foregroundColor(Theme.slate).padding(.bottom, 6)
+        }
+        .padding(18)
+        .onAppear { idx = currentIndex(); regen() }
+    }
+
+    func label(_ k: String) -> String { targets.first { $0.0 == k }?.1 ?? k }
+
+    func currentIndex() -> Int {
+        guard let cp = s.result?.checkpoints else { return 0 }
+        switch target { case "address": return cp.address; case "top": return cp.top
+        case "impact": return cp.impact; default: return cp.finish }
+    }
+
+    func step(_ d: Int) {
+        idx = max(0, min(series.count - 1, idx + d)); regen()
+    }
+
+    func regen() {
+        let i = idx
+        guard let url = s.result?.videoURL, series.indices.contains(i) else { return }
+        let frame = series[i]
+        let traj = series.compactMap { PoseAnalyzer.bestWristXY($0) }
+        Task.detached {
+            let asset = AVURLAsset(url: url)
+            let gen = AVAssetImageGenerator(asset: asset)
+            gen.appliesPreferredTrackTransform = true
+            gen.requestedTimeToleranceBefore = .zero
+            gen.requestedTimeToleranceAfter = .zero
+            gen.maximumSize = CGSize(width: 640, height: 640)
+            let t = CMTime(seconds: frame.t, preferredTimescale: 600)
+            guard let cg = try? gen.copyCGImage(at: t, actualTime: nil) else { return }
+            let ov = PoseAnalyzer.renderOverlay(on: cg, points: frame.points, scores: frame.scores, trajectory: traj)
+            let ui = UIImage(cgImage: ov)
+            await MainActor.run { self.preview = ui }
         }
     }
 }

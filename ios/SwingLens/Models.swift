@@ -70,6 +70,7 @@ struct AnalysisResult {
     var checkpoints: Checkpoints?
     var shape: ShapeInfo?
     var recordID: UUID? = nil   // id en el historial (para editar/reabrir)
+    var videoURL: URL? = nil    // para re-generar frames al ajustar checkpoints
 }
 
 // Registro guardado para el historial de progreso. Guarda lo suficiente para
