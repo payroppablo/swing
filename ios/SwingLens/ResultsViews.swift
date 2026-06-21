@@ -25,6 +25,7 @@ struct ResultsView: View {
     @EnvironmentObject var s: AppState
     @State private var showScrub = false
     @State private var ringProgress: CGFloat = 0
+    @State private var selectedCP = "top"
     var r: AnalysisResult? { s.result }
 
     var body: some View {
@@ -283,24 +284,78 @@ struct ResultsView: View {
                 Text("⚠ Casi no se detectó el cuerpo en este video. Graba al golfista de cuerpo completo, bien iluminado y ocupando buena parte del cuadro.")
                     .font(.system(size: 11.5)).foregroundColor(Color(hex: 0xC2843B)).fixedSize(horizontal: false, vertical: true)
             }
+            let keys = ["address", "top", "impact", "finish"]
             HStack(spacing: 7) {
                 ForEach(0..<idxs.count, id: \.self) { i in
-                    VStack(spacing: 4) {
-                        ZStack {
-                            if let cg = r.series[idxs[i]].image {
-                                Image(uiImage: UIImage(cgImage: cg)).resizable().scaledToFill()
-                                    .frame(height: 116).frame(maxWidth: .infinity).clipped()
-                            } else {
-                                Rectangle().fill(Color(hex: 0x0D241C)).frame(height: 116)
+                    Button { selectedCP = keys[i] } label: {
+                        VStack(spacing: 4) {
+                            ZStack {
+                                if let cg = r.series[idxs[i]].image {
+                                    Image(uiImage: UIImage(cgImage: cg)).resizable().scaledToFill()
+                                        .frame(height: 116).frame(maxWidth: .infinity).clipped()
+                                } else {
+                                    Rectangle().fill(Color(hex: 0x0D241C)).frame(height: 116)
+                                }
                             }
+                            .cornerRadius(10)
+                            .overlay(RoundedRectangle(cornerRadius: 10)
+                                .stroke(selectedCP == keys[i] ? Theme.darkGreen : colors[i],
+                                        lineWidth: selectedCP == keys[i] ? 3 : (i == 1 || i == 2 ? 2 : 1)))
+                            Text(labels[i]).font(.system(size: 9.5, weight: selectedCP == keys[i] || i == 1 || i == 2 ? .bold : .semibold))
+                                .foregroundColor(selectedCP == keys[i] ? Theme.darkGreen : colors[i])
                         }
-                        .cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(colors[i], lineWidth: i == 1 || i == 2 ? 2 : 1))
-                        Text(labels[i]).font(.system(size: 9.5, weight: i == 1 || i == 2 ? .bold : .semibold)).foregroundColor(colors[i])
                     }
                 }
             }
+            // Recomendación del checkpoint seleccionado
+            let adv = checkpointAdvice(selectedCP, r)
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: adv.good ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .foregroundColor(adv.good ? Theme.actionGreen : Theme.amber).font(.system(size: 18))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(adv.title).font(.system(size: 13.5, weight: .bold)).foregroundColor(Theme.ink)
+                    Text(adv.text).font(.system(size: 12.5)).foregroundColor(Theme.slate).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12).background(Color.white).cornerRadius(14)
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.cardBorder))
         }
+    }
+
+    // Recomendación específica por checkpoint, basada en lo medido
+    func checkpointAdvice(_ key: String, _ r: AnalysisResult) -> (title: String, text: String, good: Bool) {
+        switch key {
+        case "address":
+            if r.setup >= 70 { return ("Address sólido", "Buena postura y hombros equilibrados al inicio. Mantén ese setup.", true) }
+            return ("Mejora el address", "Inclínate desde la cadera con la espalda recta y nivela los hombros. Un buen setup arregla medio swing.", false)
+        case "top":
+            if r.headMovCm > 5 {
+                return ("Cabeza en el Top", "Subiste/moviste la cabeza ~\(r.headMovCm) cm en el backswing. Mantenla quieta para contactar centrado. Drill: cabeza contra la pared.", false)
+            }
+            if let xf = topXFactor(r), xf < 18 {
+                return ("Falta separación", "Poca separación hombros-cadera (~\(Int(xf))°) en el Top. Gira más el torso sobre caderas estables para crear X-factor.", false)
+            }
+            return ("Buen Top", "Giro completo y cabeza estable. Esa es la base de la potencia.", true)
+        case "impact":
+            if let ret = r.shape?.spineRet, ret > 12 {
+                return ("Perdiste postura", "En el impacto te estiraste/levantaste (early extension, ±\(Int(ret))°). Mantén el ángulo de columna. Drill: sentarse al impacto.", false)
+            }
+            if r.hipRotation < 55 {
+                return ("Abre la cadera", "Tu cadera no abre lo suficiente al impacto, fugas potencia. Drill: Pump-and-Hold para que la cadera lidere.", false)
+            }
+            return ("Buen impacto", "Mantienes postura y la cadera abre hacia el objetivo. Así se libera la potencia.", true)
+        default:
+            if r.followThrough >= 70 { return ("Finish balanceado", "Terminas con el peso en el pie delantero y el pecho al objetivo. ", true) }
+            return ("Sostén el finish", "Terminas algo desbalanceado. Llega a un finish completo y aguántalo 3 segundos.", false)
+        }
+    }
+
+    func topXFactor(_ r: AnalysisResult) -> Double? {
+        guard let cp = r.checkpoints else { return nil }
+        let A = r.series[cp.address], T = r.series[cp.top]
+        guard let sa = A.shoulderAngle, let ta = T.shoulderAngle, let ha = A.hipAngle, let th = T.hipAngle else { return nil }
+        return PoseAnalyzer.angleDiff(ta, sa) - PoseAnalyzer.angleDiff(th, ha)
     }
 
     func planeCard(_ shape: ShapeInfo, club: Club) -> some View {
@@ -640,6 +695,7 @@ struct ScrubView: View {
     func loadPreview(_ i: Int) async {
         guard let url = s.result?.videoURL, series.indices.contains(i) else { return }
         let frame = series[i]
+        let rotation = s.result?.rotation ?? 0
         let paths = PoseAnalyzer.swingPaths(series, checkpoints: s.result?.checkpoints)
         let ui: UIImage? = await Task.detached {
             let asset = AVURLAsset(url: url)
@@ -649,7 +705,8 @@ struct ScrubView: View {
             gen.requestedTimeToleranceAfter = .zero
             gen.maximumSize = CGSize(width: 1080, height: 1080)
             let t = CMTime(seconds: frame.t, preferredTimescale: 600)
-            guard let cg = try? gen.copyCGImage(at: t, actualTime: nil) else { return nil }
+            guard let raw = try? gen.copyCGImage(at: t, actualTime: nil) else { return nil }
+            let cg = PoseAnalyzer.prepareFrame(raw, rotation: rotation)
             let ov = PoseAnalyzer.renderOverlay(on: cg, points: frame.points, scores: frame.scores,
                                                 pathBack: paths.back, pathDown: paths.down)
             return UIImage(cgImage: ov)

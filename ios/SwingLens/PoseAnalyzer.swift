@@ -3,6 +3,8 @@ import AVFoundation
 import Vision
 import CoreGraphics
 import UIKit
+import CoreImage
+import CoreImage.CIFilterBuiltins
 
 // Motor de análisis: extrae frames con AVAssetImageGenerator (exactos en iOS),
 // corre Vision (VNDetectHumanBodyPoseRequest), arma la serie y detecta los 4
@@ -45,10 +47,17 @@ struct PoseAnalyzer {
         var prevHip: Double? = nil
 
         let request = VNDetectHumanBodyPoseRequest()
+
+        // 1) Detectar la rotación correcta (videos compartidos vienen de lado)
+        let sampleTimes = [startT + duration * 0.3, startT + duration * 0.5, startT + duration * 0.7]
+        let rotation = bestRotation(gen, times: sampleTimes, request: request)
+
         var t = startT
         while t <= endT {
             let cmt = CMTime(seconds: t, preferredTimescale: 600)
-            guard let cg = try? gen.copyCGImage(at: cmt, actualTime: nil) else { t += step; continue }
+            guard let raw = try? gen.copyCGImage(at: cmt, actualTime: nil) else { t += step; continue }
+            // 2) Enderezar + levantar sombras (contraluz) antes de Vision
+            let cg = prepareFrame(raw, rotation: rotation)
             let handler = VNImageRequestHandler(cgImage: cg, options: [:])
             try? handler.perform([request])
 
@@ -86,7 +95,8 @@ struct PoseAnalyzer {
         if let cp = checkpoints {
             for idx in [cp.address, cp.top, cp.impact, cp.finish] {
                 let cmt = CMTime(seconds: series[idx].t, preferredTimescale: 600)
-                if let cg = try? gen.copyCGImage(at: cmt, actualTime: nil) {
+                if let raw = try? gen.copyCGImage(at: cmt, actualTime: nil) {
+                    let cg = prepareFrame(raw, rotation: rotation)
                     series[idx].image = renderOverlay(on: cg, points: series[idx].points,
                                                       scores: series[idx].scores,
                                                       pathBack: paths.back, pathDown: paths.down)
@@ -118,8 +128,46 @@ struct PoseAnalyzer {
             tempo: tempoScore, followThrough: metrics.ft, setup: metrics.setup,
             tempoRatio: tempoRatio, hipDeg: metrics.hipDeg, headMovCm: metrics.headMovCm,
             club: club, angle: angle, series: series, checkpoints: checkpoints, shape: shape, sequence: sequence,
-            detectedFrames: detected, totalFrames: series.count
+            detectedFrames: detected, totalFrames: series.count, rotation: rotation
         )
+    }
+
+    // ── Robustez de Vision: rotación + realce de sombras ──
+    static let ciContext = CIContext(options: nil)
+
+    static func prepareFrame(_ cg: CGImage, rotation: Int) -> CGImage {
+        var ci = CIImage(cgImage: cg)
+        if rotation != 0 {
+            ci = ci.transformed(by: CGAffineTransform(rotationAngle: CGFloat(Double(rotation) * .pi / 180)))
+            ci = ci.transformed(by: CGAffineTransform(translationX: -ci.extent.minX, y: -ci.extent.minY))
+        }
+        let f = CIFilter.highlightShadowAdjust()
+        f.inputImage = ci
+        f.shadowAmount = 1.0      // levanta sombras (clave para contraluz/siluetas)
+        f.highlightAmount = 0.85
+        let out = f.outputImage ?? ci
+        return ciContext.createCGImage(out, from: out.extent) ?? cg
+    }
+
+    // Prueba 0/90/270/180 en unos frames y elige la orientación con más keypoints.
+    static func bestRotation(_ gen: AVAssetImageGenerator, times: [Double], request: VNDetectHumanBodyPoseRequest) -> Int {
+        var best = 0, bestCount = -1
+        for rot in [0, 90, 270, 180] {
+            var count = 0
+            for t in times {
+                let cmt = CMTime(seconds: t, preferredTimescale: 600)
+                guard let raw = try? gen.copyCGImage(at: cmt, actualTime: nil) else { continue }
+                let cg = prepareFrame(raw, rotation: rot)
+                let h = VNImageRequestHandler(cgImage: cg, options: [:])
+                try? h.perform([request])
+                if let obs = request.results?.first as? VNHumanBodyPoseObservation,
+                   let rp = try? obs.recognizedPoints(.all) {
+                    count += rp.values.filter { $0.confidence > 0.3 }.count
+                }
+            }
+            if count > bestCount { bestCount = count; best = rot }
+        }
+        return best
     }
 
     // Secuencia cinemática: momento de máxima velocidad de caderas/hombros/brazos
