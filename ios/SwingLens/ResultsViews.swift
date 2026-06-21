@@ -376,7 +376,13 @@ struct ResultsView: View {
                 Text(label).font(.system(size: 16, weight: .bold)).foregroundColor(pathColor)
                 Text("\(shape?.shape ?? "") — \(shape?.shapeNote ?? "")").font(.system(size: 12.5)).foregroundColor(Theme.slate)
             }
-            // Diagrama
+            // Foto del swing con tu trayectoria dibujada (usamos el Finish)
+            if let cp = r.checkpoints, let cg = r.series[cp.finish].image {
+                Image(uiImage: UIImage(cgImage: cg)).resizable().scaledToFit()
+                    .frame(maxWidth: .infinity).frame(maxHeight: 300).cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.cardBorder))
+            }
+            // Diagrama: tu trayectoria vs el plano ideal
             ZStack {
                 RoundedRectangle(cornerRadius: 12).fill(Color(hex: 0x0D241C))
                 if hasPath {

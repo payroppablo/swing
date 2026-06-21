@@ -149,11 +149,12 @@ struct PoseAnalyzer {
         return ciContext.createCGImage(out, from: out.extent) ?? cg
     }
 
-    // Prueba 0/90/270/180 en unos frames y elige la orientación con más keypoints.
+    // Prueba 0/90/180/270 pero PREFIERE 0 (los videos de iPhone ya vienen
+    // derechos). Solo rota si otra orientación detecta claramente más cuerpo,
+    // para no voltear videos que ya estaban bien.
     static func bestRotation(_ gen: AVAssetImageGenerator, times: [Double], request: VNDetectHumanBodyPoseRequest) -> Int {
-        var best = 0, bestCount = -1
-        for rot in [0, 90, 270, 180] {
-            var count = 0
+        func count(_ rot: Int) -> Int {
+            var c = 0
             for t in times {
                 let cmt = CMTime(seconds: t, preferredTimescale: 600)
                 guard let raw = try? gen.copyCGImage(at: cmt, actualTime: nil) else { continue }
@@ -162,10 +163,18 @@ struct PoseAnalyzer {
                 try? h.perform([request])
                 if let obs = request.results?.first as? VNHumanBodyPoseObservation,
                    let rp = try? obs.recognizedPoints(.all) {
-                    count += rp.values.filter { $0.confidence > 0.3 }.count
+                    c += rp.values.filter { $0.confidence > 0.3 }.count
                 }
             }
-            if count > bestCount { bestCount = count; best = rot }
+            return c
+        }
+        let zero = count(0)
+        // Si 0 ya detecta razonablemente, quédate en 0.
+        if zero >= 6 { return 0 }
+        var best = 0, bestCount = Int(Double(max(1, zero)) * 1.6)  // umbral: 1.6x mejor que 0
+        for rot in [90, 270, 180] {
+            let c = count(rot)
+            if c > bestCount { bestCount = c; best = rot }
         }
         return best
     }
