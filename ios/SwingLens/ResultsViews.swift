@@ -237,6 +237,13 @@ struct ResultsView: View {
             .frame(maxWidth: .infinity, alignment: .leading).padding(18)
             .background(LinearGradient(colors: [Theme.darkGreen, Color(hex: 0x10301F)], startPoint: .topLeading, endPoint: .bottomTrailing))
             .cornerRadius(18)
+
+            Button { s.screen = .drills } label: {
+                HStack { Image(systemName: "list.bullet.rectangle"); Text("Ver todos los ejercicios") }
+                    .font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.darkGreen)
+                    .frame(maxWidth: .infinity).padding(13)
+                    .background(Color(hex: 0xEAF6EC)).cornerRadius(13)
+            }
         }
     }
 
@@ -392,26 +399,30 @@ struct ScrubView: View {
     var body: some View {
         VStack(spacing: 14) {
             Text("Ajustar checkpoints").font(Theme.serif(20)).foregroundColor(Theme.ink).padding(.top, 8)
+            Text("Elige cuál ajustar y desliza al frame correcto")
+                .font(.system(size: 12)).foregroundColor(Theme.slate)
             Picker("", selection: $target) {
                 ForEach(targets, id: \.0) { Text($0.1).tag($0.0) }
             }
             .pickerStyle(.segmented)
-            .onChange(of: target) { _ in idx = currentIndex(); regen() }
+            .onChange(of: target) { _ in idx = currentIndex() }
 
             ZStack {
                 RoundedRectangle(cornerRadius: 14).fill(Color.black)
                 if let p = preview {
                     Image(uiImage: p).resizable().scaledToFit()
+                } else {
+                    ProgressView().tint(.white)
                 }
             }
-            .frame(height: 360).cornerRadius(14)
+            .frame(height: 340).cornerRadius(14)
 
             HStack(spacing: 10) {
-                Button { step(-1) } label: { Image(systemName: "chevron.left").frame(width: 38, height: 38).background(Color(hex: 0xF1F2EC)).clipShape(Circle()) }
-                Slider(value: Binding(get: { Double(idx) }, set: { idx = Int($0.rounded()); regen() }),
+                Button { idx = max(0, idx - 1) } label: { Image(systemName: "chevron.left").frame(width: 38, height: 38).background(Color(hex: 0xF1F2EC)).clipShape(Circle()) }
+                Slider(value: Binding(get: { Double(idx) }, set: { idx = Int($0.rounded()) }),
                        in: 0...Double(max(1, series.count - 1)))
                 .tint(Theme.actionGreen)
-                Button { step(1) } label: { Image(systemName: "chevron.right").frame(width: 38, height: 38).background(Color(hex: 0xF1F2EC)).clipShape(Circle()) }
+                Button { idx = min(series.count - 1, idx + 1) } label: { Image(systemName: "chevron.right").frame(width: 38, height: 38).background(Color(hex: 0xF1F2EC)).clipShape(Circle()) }
             }
             Text("frame \(idx + 1)/\(series.count) · t=\(String(format: "%.2f", series.indices.contains(idx) ? series[idx].t : 0))s")
                 .font(Theme.mono(11)).foregroundColor(Theme.slate)
@@ -427,7 +438,8 @@ struct ScrubView: View {
             Button("Cancelar") { dismiss() }.foregroundColor(Theme.slate).padding(.bottom, 6)
         }
         .padding(18)
-        .onAppear { idx = currentIndex(); regen() }
+        .onAppear { idx = currentIndex() }
+        .task(id: idx) { await loadPreview(idx) }
     }
 
     func label(_ k: String) -> String { targets.first { $0.0 == k }?.1 ?? k }
@@ -438,16 +450,11 @@ struct ScrubView: View {
         case "impact": return cp.impact; default: return cp.finish }
     }
 
-    func step(_ d: Int) {
-        idx = max(0, min(series.count - 1, idx + d)); regen()
-    }
-
-    func regen() {
-        let i = idx
+    func loadPreview(_ i: Int) async {
         guard let url = s.result?.videoURL, series.indices.contains(i) else { return }
         let frame = series[i]
         let traj = series.compactMap { PoseAnalyzer.bestWristXY($0) }
-        Task.detached {
+        let ui: UIImage? = await Task.detached {
             let asset = AVURLAsset(url: url)
             let gen = AVAssetImageGenerator(asset: asset)
             gen.appliesPreferredTrackTransform = true
@@ -455,10 +462,10 @@ struct ScrubView: View {
             gen.requestedTimeToleranceAfter = .zero
             gen.maximumSize = CGSize(width: 640, height: 640)
             let t = CMTime(seconds: frame.t, preferredTimescale: 600)
-            guard let cg = try? gen.copyCGImage(at: t, actualTime: nil) else { return }
+            guard let cg = try? gen.copyCGImage(at: t, actualTime: nil) else { return nil }
             let ov = PoseAnalyzer.renderOverlay(on: cg, points: frame.points, scores: frame.scores, trajectory: traj)
-            let ui = UIImage(cgImage: ov)
-            await MainActor.run { self.preview = ui }
-        }
+            return UIImage(cgImage: ov)
+        }.value
+        if let ui = ui { preview = ui }
     }
 }

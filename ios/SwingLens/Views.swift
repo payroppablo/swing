@@ -14,6 +14,7 @@ struct RootView: View {
             case .analysis: AnalysisView()
             case .results:  ResultsView()
             case .progress: ProgressScreen()
+            case .drills:   DrillsView()
             }
         }
         .animation(.easeInOut(duration: 0.25), value: s.screen)
@@ -41,6 +42,8 @@ struct HomeView: View {
                            bg: Theme.actionGreen, fg: Color(hex: 0x08311C)) { s.screen = .upload }
                 menuButton("Tu progreso", subtitle: "Historial y evolución de tu score",
                            bg: .white.opacity(0.08), fg: .white) { s.screen = .progress }
+                menuButton("Drills & Tips", subtitle: "Ejercicios para sentir y mejorar",
+                           bg: .white.opacity(0.08), fg: .white) { s.screen = .drills }
                 Spacer().frame(height: 20)
             }
             .padding(28)

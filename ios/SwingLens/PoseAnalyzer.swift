@@ -115,7 +115,7 @@ struct PoseAnalyzer {
         ("nose","left_shoulder"), ("nose","right_shoulder"),
     ]
 
-    // Dibuja la trayectoria de manos + el esqueleto sobre el frame.
+    // Dibuja la trayectoria de manos + el esqueleto + línea de plano sobre el frame.
     static func renderOverlay(on cg: CGImage, points: [String: CGPoint],
                               scores: [String: Double], trajectory: [CGPoint]) -> CGImage {
         let size = CGSize(width: cg.width, height: cg.height)
@@ -123,31 +123,41 @@ struct PoseAnalyzer {
         let img = renderer.image { rctx in
             let c = rctx.cgContext
             UIImage(cgImage: cg).draw(in: CGRect(origin: .zero, size: size))
-            let lw = max(3, size.width / 130)
+            let lw = max(4, size.width / 100)
+            let minScore = 0.1
 
-            // Trayectoria de manos (línea ámbar suave)
+            // Trayectoria de manos (línea ámbar gruesa)
             if trajectory.count > 1 {
-                c.setLineWidth(lw * 0.9)
-                c.setStrokeColor(UIColor(red: 0.76, green: 0.52, blue: 0.23, alpha: 0.85).cgColor)
+                c.setLineWidth(lw)
+                c.setStrokeColor(UIColor(red: 0.95, green: 0.62, blue: 0.23, alpha: 0.95).cgColor)
                 c.setLineCap(.round); c.setLineJoin(.round)
                 c.move(to: trajectory[0])
                 for p in trajectory.dropFirst() { c.addLine(to: p) }
                 c.strokePath()
+
+                // Línea de plano (recta de la primera a la última posición de manos)
+                if let a = trajectory.first, let b = trajectory.last {
+                    c.setLineWidth(max(2, lw * 0.5))
+                    c.setStrokeColor(UIColor(red: 1, green: 1, blue: 1, alpha: 0.55).cgColor)
+                    c.setLineDash(phase: 0, lengths: [lw, lw])
+                    c.move(to: a); c.addLine(to: b); c.strokePath()
+                    c.setLineDash(phase: 0, lengths: [])
+                }
             }
 
-            // Esqueleto (verde)
+            // Esqueleto (verde brillante) — umbral bajo para que casi siempre dibuje
             c.setLineWidth(lw)
-            c.setStrokeColor(UIColor(red: 0.37, green: 0.88, blue: 0.43, alpha: 1).cgColor)
+            c.setStrokeColor(UIColor(red: 0.37, green: 0.92, blue: 0.45, alpha: 1).cgColor)
             c.setLineCap(.round)
             for (a, b) in edges {
-                if let pa = points[a], let pb = points[b], (scores[a] ?? 0) > 0.25, (scores[b] ?? 0) > 0.25 {
+                if let pa = points[a], let pb = points[b], (scores[a] ?? 0) > minScore, (scores[b] ?? 0) > minScore {
                     c.move(to: pa); c.addLine(to: pb); c.strokePath()
                 }
             }
             // Articulaciones
-            for (name, p) in points where (scores[name] ?? 0) > 0.25 {
-                let r = max(3.5, size.width / 90)
-                c.setFillColor(UIColor(red: 0.5, green: 0.82, blue: 0.54, alpha: 1).cgColor)
+            for (name, p) in points where (scores[name] ?? 0) > minScore {
+                let r = max(4, size.width / 80)
+                c.setFillColor(UIColor(red: 0.55, green: 0.86, blue: 0.58, alpha: 1).cgColor)
                 c.fillEllipse(in: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2))
             }
         }
@@ -188,7 +198,7 @@ struct PoseAnalyzer {
 
     // ── señales ──
     static func bestWristXY(_ f: FrameSample) -> CGPoint? {
-        var best: CGPoint? = nil; var bestS = 0.15
+        var best: CGPoint? = nil; var bestS = 0.1
         for n in ["left_wrist","right_wrist"] {
             if let pt = f.points[n], let sc = f.scores[n], sc > bestS { bestS = sc; best = pt }
         }

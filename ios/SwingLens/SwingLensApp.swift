@@ -11,7 +11,7 @@ struct SwingLensApp: App {
     }
 }
 
-enum Screen { case home, upload, analysis, results, progress }
+enum Screen { case home, upload, analysis, results, progress, drills }
 
 @MainActor
 final class AppState: ObservableObject {
