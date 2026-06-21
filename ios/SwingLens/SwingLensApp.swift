@@ -49,6 +49,7 @@ final class AppState: ObservableObject {
                     self.result = res
                     self.birdieText = ""
                     self.resultsFrom = .home
+                    self.saveAutoSamples(res)
                     self.screen = .results
                 } else {
                     self.screen = .upload
@@ -77,6 +78,23 @@ final class AppState: ObservableObject {
         birdieText = ""
         resultsFrom = .progress
         screen = .results
+    }
+
+    // Guarda las 4 posiciones auto-detectadas como muestras (source="auto")
+    func saveAutoSamples(_ r: AnalysisResult) {
+        guard let cp = r.checkpoints else { return }
+        let map: [(String, Int)] = [("address", cp.address), ("top", cp.top), ("impact", cp.impact), ("finish", cp.finish)]
+        for (label, idx) in map where r.series.indices.contains(idx) {
+            let f = r.series[idx]
+            var kp: [String: [Double]] = [:]
+            for (name, p) in f.points { kp[name] = [Double(p.x), Double(p.y), f.scores[name] ?? 0] }
+            if kp.count >= 6 {
+                TrainingStore.shared.add(TrainingSample(
+                    date: Date(), club: r.club.rawValue, angle: r.angle.rawValue,
+                    checkpoint: label, t: f.t, rotation: r.rotation, source: "auto", keypoints: kp))
+            }
+        }
+        trainingCount = TrainingStore.shared.count
     }
 
     // Ajuste manual de un checkpoint (desde el scrubber)
