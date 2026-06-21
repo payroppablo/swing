@@ -59,7 +59,10 @@ struct HomeView: View {
                            bg: .white.opacity(0.08), fg: .white) { s.screen = .progress }
                 menuButton("Drills & Tips", subtitle: "Ejercicios para sentir y mejorar",
                            bg: .white.opacity(0.08), fg: .white) { s.screen = .drills }
-                Spacer().frame(height: 20)
+                Text("SwingLens \(AppInfo.build)")
+                    .font(.system(size: 10)).foregroundColor(.white.opacity(0.4))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Spacer().frame(height: 12)
             }
             .padding(28)
         }

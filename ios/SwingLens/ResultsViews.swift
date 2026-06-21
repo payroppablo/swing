@@ -271,8 +271,18 @@ struct ResultsView: View {
         let labels = ["Address", "Top", "Impacto", "Finish"]
         let colors: [Color] = [Color(hex: 0x6B756F), Theme.amber, Theme.actionGreen, Color(hex: 0x6B756F)]
         let idxs: [Int] = r.checkpoints.map { [$0.address, $0.top, $0.impact, $0.finish] } ?? []
+        let detRatio = r.totalFrames > 0 ? Double(r.detectedFrames) / Double(r.totalFrames) : 0
+        let detColor = detRatio >= 0.6 ? Color(hex: 0x3E8F58) : (detRatio >= 0.3 ? Theme.amber : Color(hex: 0xC2843B))
         return VStack(alignment: .leading, spacing: 8) {
-            Text("SWING CHECKPOINTS").font(.system(size: 11, weight: .semibold)).tracking(2.5).foregroundColor(Color(hex: 0x9AA39C))
+            HStack {
+                Text("SWING CHECKPOINTS").font(.system(size: 11, weight: .semibold)).tracking(2.5).foregroundColor(Color(hex: 0x9AA39C))
+                Spacer()
+                Text("pose \(r.detectedFrames)/\(r.totalFrames) · \(AppInfo.build)").font(Theme.mono(9)).foregroundColor(detColor)
+            }
+            if r.totalFrames > 0 && detRatio < 0.3 {
+                Text("⚠ Casi no se detectó el cuerpo en este video. Graba al golfista de cuerpo completo, bien iluminado y ocupando buena parte del cuadro.")
+                    .font(.system(size: 11.5)).foregroundColor(Color(hex: 0xC2843B)).fixedSize(horizontal: false, vertical: true)
+            }
             HStack(spacing: 7) {
                 ForEach(0..<idxs.count, id: \.self) { i in
                     VStack(spacing: 4) {

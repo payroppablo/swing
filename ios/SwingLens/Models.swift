@@ -80,9 +80,13 @@ struct AnalysisResult {
     var checkpoints: Checkpoints?
     var shape: ShapeInfo?
     var sequence: SequenceInfo? = nil
+    var detectedFrames: Int = 0     // frames donde Vision encontró cuerpo
+    var totalFrames: Int = 0
     var recordID: UUID? = nil   // id en el historial (para editar/reabrir)
     var videoURL: URL? = nil    // para re-generar frames al ajustar checkpoints
 }
+
+enum AppInfo { static let build = "v1.3" }
 
 // Registro guardado para el historial de progreso. Guarda lo suficiente para
 // REABRIR el reporte completo (incluyendo las 4 fotos de checkpoints en JPEG).

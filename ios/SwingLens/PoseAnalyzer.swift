@@ -108,11 +108,13 @@ struct PoseAnalyzer {
         }
         progress(1.0)
 
+        let detected = series.filter { !$0.points.isEmpty }.count
         return AnalysisResult(
             score: metrics.score, headStability: metrics.head, hipRotation: metrics.hip,
             tempo: tempoScore, followThrough: metrics.ft, setup: metrics.setup,
             tempoRatio: tempoRatio, hipDeg: metrics.hipDeg, headMovCm: metrics.headMovCm,
-            club: club, angle: angle, series: series, checkpoints: checkpoints, shape: shape, sequence: sequence
+            club: club, angle: angle, series: series, checkpoints: checkpoints, shape: shape, sequence: sequence,
+            detectedFrames: detected, totalFrames: series.count
         )
     }
 
