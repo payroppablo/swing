@@ -482,7 +482,7 @@ struct ScrubView: View {
             gen.appliesPreferredTrackTransform = true
             gen.requestedTimeToleranceBefore = .zero
             gen.requestedTimeToleranceAfter = .zero
-            gen.maximumSize = CGSize(width: 640, height: 640)
+            gen.maximumSize = CGSize(width: 1080, height: 1080)
             let t = CMTime(seconds: frame.t, preferredTimescale: 600)
             guard let cg = try? gen.copyCGImage(at: t, actualTime: nil) else { return nil }
             let ov = PoseAnalyzer.renderOverlay(on: cg, points: frame.points, scores: frame.scores,

@@ -33,7 +33,7 @@ struct PoseAnalyzer {
         gen.appliesPreferredTrackTransform = true
         gen.requestedTimeToleranceBefore = .zero
         gen.requestedTimeToleranceAfter = .zero
-        gen.maximumSize = CGSize(width: 640, height: 640)
+        gen.maximumSize = CGSize(width: 1080, height: 1080)
 
         let step = 1.0 / 30.0
         var series: [FrameSample] = []
@@ -115,16 +115,23 @@ struct PoseAnalyzer {
     ]
 
     // Separa la trayectoria de manos en backswing (address→top) y bajada (top→fin).
+    // Interpola los huecos donde la muñeca se tapa (común en down-the-line) para
+    // que la línea sea continua.
     static func swingPaths(_ series: [FrameSample], checkpoints: Checkpoints?) -> (back: [CGPoint], down: [CGPoint]) {
-        guard let cp = checkpoints else {
-            return (series.compactMap { bestWristXY($0) }, [])
+        let rawX: [Double?] = series.map { bestWristXY($0).map { Double($0.x) } }
+        let rawY: [Double?] = series.map { bestWristXY($0).map { Double($0.y) } }
+        let X = interpolateNulls(rawX), Y = interpolateNulls(rawY)
+        func pts(_ lo: Int, _ hi: Int) -> [CGPoint] {
+            guard lo <= hi else { return [] }
+            return (lo...hi).compactMap { i in
+                (series.indices.contains(i) && X[i] != nil && Y[i] != nil) ? CGPoint(x: X[i]!, y: Y[i]!) : nil
+            }
         }
+        guard let cp = checkpoints else { return (pts(0, series.count - 1), []) }
         let a = max(0, min(cp.address, cp.top))
-        let topI = cp.top
+        let topI = max(a, cp.top)
         let endI = series.count - 1
-        let back = (a...max(a, topI)).compactMap { series.indices.contains($0) ? bestWristXY(series[$0]) : nil }
-        let down = (topI...max(topI, endI)).compactMap { series.indices.contains($0) ? bestWristXY(series[$0]) : nil }
-        return (back, down)
+        return (pts(a, topI), pts(topI, endI))
     }
 
     // Traza una polilínea SUAVIZADA (curvas por los puntos medios) con glow.
