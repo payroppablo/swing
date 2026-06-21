@@ -542,6 +542,27 @@ struct ResultsView: View {
         }
     }
 
+    // Qué hacer (acción concreta) por área
+    func fixFor(_ key: String) -> String {
+        switch key {
+        case "tempo":  return "No aceleres desde arriba: empieza la bajada lento y deja que la velocidad llegue al pasar por la bola."
+        case "setup":  return "Inclínate desde la cadera (no encorves la espalda), rodillas suaves y peso en el centro del pie."
+        case "head":   return "Fija la vista en la bola y mantén la cabeza detrás de ella hasta DESPUÉS del impacto."
+        case "hip":    return "Inicia la bajada abriendo la cadera delantera hacia el objetivo ANTES de soltar los brazos."
+        default:        return "Gira a un finish completo: pecho al objetivo, peso en el pie delantero, y sostenlo 3 segundos."
+        }
+    }
+    // Cómo sentirlo
+    func feelFor(_ key: String) -> String {
+        switch key {
+        case "tempo":  return "Siente que el palo 'cae' suave al iniciar la bajada y la potencia aparece sola en el impacto."
+        case "setup":  return "Espalda recta y libre para girar; brazos colgando justo bajo los hombros."
+        case "head":   return "Como si giraras alrededor de un poste fijo que pasa por tu cabeza."
+        case "hip":    return "La cadera 'arranca' primero y los brazos llegan después — efecto látigo."
+        default:        return "Termina en equilibrio, como una foto que puedas aguantar sin tambalearte."
+        }
+    }
+
     @ViewBuilder
     func coachContent(_ r: AnalysisResult) -> some View {
         let all = findings(r)
@@ -549,7 +570,6 @@ struct ResultsView: View {
         let focusRaw = all.filter { $0.score < 70 }.sorted { $0.score < $1.score }
         let focus = Array((focusRaw.isEmpty ? [all.min { $0.score < $1.score }!] : focusRaw).prefix(3))
         let strengthsShown = strengths.isEmpty ? [all.max { $0.score < $1.score }!] : strengths
-        let drill = drillFor(focus.first?.key ?? "hip")
 
         VStack(alignment: .leading, spacing: 11) {
             Text("LO QUE HACES BIEN").font(.system(size: 11, weight: .semibold)).tracking(2.5).foregroundColor(Color(hex: 0x3E8F58))
@@ -558,23 +578,27 @@ struct ResultsView: View {
                         title: f.sTitle, desc: f.sDesc, badge: "Fortaleza", badgeColor: Color(hex: 0x3E8F58),
                         score: f.score, scoreLabel: f.label, light: true)
             }
-            Text("ÁREAS A MEJORAR").font(.system(size: 11, weight: .semibold)).tracking(2.5).foregroundColor(Color(hex: 0x9AA39C)).padding(.top, 4)
-            ForEach(focus, id: \.key) { f in
-                let badge = f.score < 55 ? "Prioridad" : (f.score < 68 ? "Moderado" : "Menor")
-                tipCard(icon: "scope", iconColor: Theme.lightGreen,
-                        title: f.fTitle, desc: f.fDesc, badge: badge, badgeColor: Theme.amber,
-                        score: f.score, scoreLabel: f.label, light: false)
+
+            // TU ARREGLO #1 — lo más importante, accionable
+            if let top = focus.first { arregloCard(top) }
+
+            // Otras áreas a mejorar (con qué hacer)
+            if focus.count > 1 {
+                Text("OTRAS ÁREAS").font(.system(size: 11, weight: .semibold)).tracking(2.5).foregroundColor(Color(hex: 0x9AA39C)).padding(.top, 4)
+                ForEach(Array(focus.dropFirst()), id: \.key) { f in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(f.fTitle).font(.system(size: 14.5, weight: .semibold)).foregroundColor(Theme.ink)
+                            Spacer()
+                            Text("\(f.score)").font(Theme.serif(18)).foregroundColor(Theme.amber)
+                        }
+                        Text("👉 Qué hacer: \(fixFor(f.key))").font(.system(size: 12.5)).foregroundColor(Theme.slate)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14).background(Color.white).cornerRadius(16)
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.cardBorder))
+                }
             }
-            // Drill recomendado
-            VStack(alignment: .leading, spacing: 8) {
-                Text("DRILL RECOMENDADO").font(.system(size: 11, weight: .semibold)).tracking(2.5).foregroundColor(Theme.lightGreen)
-                Text(drill.0).font(Theme.serif(22)).foregroundColor(.white)
-                Text(drill.1).font(.system(size: 13.5)).foregroundColor(.white.opacity(0.85))
-                Text(drill.2).font(Theme.mono(11)).foregroundColor(.white.opacity(0.6))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading).padding(18)
-            .background(LinearGradient(colors: [Theme.darkGreen, Color(hex: 0x10301F)], startPoint: .topLeading, endPoint: .bottomTrailing))
-            .cornerRadius(18)
 
             Button { s.screen = .drills } label: {
                 HStack { Image(systemName: "list.bullet.rectangle"); Text("Ver todos los ejercicios") }
@@ -582,6 +606,43 @@ struct ResultsView: View {
                     .frame(maxWidth: .infinity).padding(13)
                     .background(Color(hex: 0xEAF6EC)).cornerRadius(13)
             }
+        }
+    }
+
+    // Tarjeta destacada con el arreglo principal: problema + qué hacer + sentir + drill
+    func arregloCard(_ f: Finding) -> some View {
+        let drill = drillFor(f.key)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("TU ARREGLO #1").font(.system(size: 11, weight: .bold)).tracking(2).foregroundColor(Theme.lightGreen)
+                Spacer()
+                Text("\(f.score)").font(.system(size: 13, weight: .bold)).foregroundColor(.white.opacity(0.7))
+            }
+            Text(f.fTitle).font(Theme.serif(22)).foregroundColor(.white)
+            blockLabel("EL PROBLEMA", f.fDesc)
+            blockLabel("QUÉ HACER", fixFor(f.key), strong: true)
+            blockLabel("CÓMO SENTIRLO", feelFor(f.key))
+            HStack(spacing: 8) {
+                Image(systemName: "figure.strengthtraining.traditional").foregroundColor(Color(hex: 0x08311C))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Drill: \(drill.0)").font(.system(size: 13, weight: .bold)).foregroundColor(Color(hex: 0x08311C))
+                    Text(drill.2).font(.system(size: 10.5)).foregroundColor(Color(hex: 0x08311C).opacity(0.7))
+                }
+                Spacer()
+            }
+            .padding(11).background(Theme.lightGreen).cornerRadius(12)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading).padding(18)
+        .background(LinearGradient(colors: [Theme.darkGreen, Color(hex: 0x10301F)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .cornerRadius(18)
+        .shadow(color: Theme.darkGreen.opacity(0.25), radius: 10, y: 5)
+    }
+
+    func blockLabel(_ tag: String, _ text: String, strong: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(tag).font(.system(size: 9.5, weight: .bold)).tracking(1).foregroundColor(Theme.lightGreen)
+            Text(text).font(.system(size: strong ? 14 : 13, weight: strong ? .semibold : .regular))
+                .foregroundColor(strong ? .white : Color(hex: 0xD8E8DB)).fixedSize(horizontal: false, vertical: true)
         }
     }
 
