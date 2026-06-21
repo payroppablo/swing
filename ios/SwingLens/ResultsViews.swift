@@ -551,6 +551,16 @@ struct ResultsView: View {
         default:        return "Gira a un finish completo: pecho al objetivo, peso en el pie delantero, y sostenlo 3 segundos."
         }
     }
+    // Título "subir de nivel" cuando el área ya va bien
+    func nextLevelTitle(_ key: String) -> String {
+        switch key {
+        case "tempo":  return "afina aún más tu ritmo"
+        case "setup":  return "perfecciona tu setup"
+        case "head":   return "más quietud de cabeza"
+        case "hip":    return "abre más la cadera"
+        default:        return "un finish más completo"
+        }
+    }
     // Cómo sentirlo
     func feelFor(_ key: String) -> String {
         switch key {
@@ -608,17 +618,23 @@ struct ResultsView: View {
         }
     }
 
-    // Tarjeta destacada con el arreglo principal: problema + qué hacer + sentir + drill
+    // Tarjeta destacada: arreglo principal, o "siguiente nivel" si ya vas bien
     func arregloCard(_ f: Finding) -> some View {
         let drill = drillFor(f.key)
+        let isGood = f.score >= 70   // ya estás bien -> enfoque "subir de nivel"
+        let header = isGood ? "TU SIGUIENTE NIVEL" : "TU ARREGLO #1"
+        let title = isGood ? "Para exprimir más: \(nextLevelTitle(f.key))" : f.fTitle
+        let problem = isGood
+            ? "Ya lo haces bien (\(f.score)). Aun así, aquí es donde más puedes ganar para acercarte al nivel tour."
+            : f.fDesc
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("TU ARREGLO #1").font(.system(size: 11, weight: .bold)).tracking(2).foregroundColor(Theme.lightGreen)
+                Text(header).font(.system(size: 11, weight: .bold)).tracking(2).foregroundColor(Theme.lightGreen)
                 Spacer()
                 Text("\(f.score)").font(.system(size: 13, weight: .bold)).foregroundColor(.white.opacity(0.7))
             }
-            Text(f.fTitle).font(Theme.serif(22)).foregroundColor(.white)
-            blockLabel("EL PROBLEMA", f.fDesc)
+            Text(title).font(Theme.serif(22)).foregroundColor(.white)
+            blockLabel(isGood ? "DÓNDE GANAR MÁS" : "EL PROBLEMA", problem)
             blockLabel("QUÉ HACER", fixFor(f.key), strong: true)
             blockLabel("CÓMO SENTIRLO", feelFor(f.key))
             HStack(spacing: 8) {
