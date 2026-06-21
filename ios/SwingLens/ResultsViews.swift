@@ -172,6 +172,7 @@ struct ResultsView: View {
         }
         .padding(16).background(Color.white).cornerRadius(18)
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.cardBorder))
+        .shadow(color: .black.opacity(0.04), radius: 8, y: 3)
     }
 
     // ── Comparación vs swing de tour (v1: contra estándar ideal por bastón) ──
@@ -267,6 +268,7 @@ struct ResultsView: View {
         }
         .padding(16).background(Color.white).cornerRadius(18)
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.cardBorder))
+        .shadow(color: .black.opacity(0.04), radius: 8, y: 3)
     }
 
     func checkpointsRow(_ r: AnalysisResult) -> some View {
@@ -359,11 +361,9 @@ struct ResultsView: View {
         return PoseAnalyzer.angleDiff(ta, sa) - PoseAnalyzer.angleDiff(th, ha)
     }
 
-    // Forma del golpe + plano, con diagrama de TU trayectoria vs el plano ideal
+    // Forma del golpe + plano: foto con tu trayectoria + tendencia + ver swing
     func planePathCard(_ r: AnalysisResult) -> some View {
-        let paths = PoseAnalyzer.swingPaths(r.series, checkpoints: r.checkpoints)
         let shape = r.shape
-        let hasPath = paths.back.count + paths.down.count > 2
         let pathColor: Color = (shape?.pathDelta ?? 0) > 8 || (shape?.pathDelta ?? 0) < -8 ? Theme.amber : Theme.actionGreen
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -373,35 +373,28 @@ struct ResultsView: View {
                     .padding(.horizontal, 7).padding(.vertical, 2).background(Color(hex: 0xF5EFE0)).cornerRadius(99)
             }
             if let label = shape?.pathLabel {
-                Text(label).font(.system(size: 16, weight: .bold)).foregroundColor(pathColor)
+                Text(label).font(.system(size: 17, weight: .bold)).foregroundColor(pathColor)
                 Text("\(shape?.shape ?? "") — \(shape?.shapeNote ?? "")").font(.system(size: 12.5)).foregroundColor(Theme.slate)
             }
-            // Foto del swing con tu trayectoria dibujada (usamos el Finish)
+            // Foto del finish con tu trayectoria dibujada sobre el golfista
             if let cp = r.checkpoints, let cg = r.series[cp.finish].image {
                 Image(uiImage: UIImage(cgImage: cg)).resizable().scaledToFit()
-                    .frame(maxWidth: .infinity).frame(maxHeight: 300).cornerRadius(12)
+                    .frame(maxWidth: .infinity).frame(maxHeight: 320).cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.cardBorder))
             }
-            // Diagrama: tu trayectoria vs el plano ideal
-            ZStack {
-                RoundedRectangle(cornerRadius: 12).fill(Color(hex: 0x0D241C))
-                if hasPath {
-                    PlaneDiagram(back: paths.back, down: paths.down,
-                                 idealAngle: Double(r.club.planeLo + r.club.planeHi) / 2)
-                        .padding(8)
-                } else {
-                    Text("No se pudo leer la trayectoria de manos en este swing.")
-                        .font(.system(size: 12)).foregroundColor(.white.opacity(0.6)).multilineTextAlignment(.center).padding()
-                }
-            }
-            .frame(height: 180)
-            // Leyenda
+            // Leyenda de colores de la trayectoria dibujada en la foto
             HStack(spacing: 14) {
                 legendDot(Theme.lightGreen, "Backswing")
                 legendDot(Theme.amber, "Bajada")
-                HStack(spacing: 5) {
-                    Rectangle().fill(Color.white.opacity(0.7)).frame(width: 14, height: 2)
-                    Text("Plano ideal").font(.system(size: 10.5)).foregroundColor(Theme.slate)
+                Spacer()
+            }
+            // Barra para ver/arrastrar el swing cuadro por cuadro
+            if r.videoURL != nil {
+                Button { showScrub = true } label: {
+                    HStack { Image(systemName: "play.rectangle.on.rectangle"); Text("Ver el swing cuadro por cuadro") }
+                        .font(.system(size: 13.5, weight: .semibold)).foregroundColor(Theme.darkGreen)
+                        .frame(maxWidth: .infinity).padding(11)
+                        .background(Color(hex: 0xEAF6EC)).cornerRadius(12)
                 }
             }
             HStack(spacing: 10) {
@@ -411,7 +404,9 @@ struct ResultsView: View {
             Text("Vision no ve el palo: la trayectoria se estima de las manos y la forma es tendencia (no mide la cara del palo).")
                 .font(.system(size: 10.5)).foregroundColor(Color(hex: 0x9AA39C))
         }
-        .padding(16).background(Color.white).cornerRadius(18).overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.cardBorder))
+        .padding(16).background(Color.white).cornerRadius(18)
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.cardBorder))
+        .shadow(color: .black.opacity(0.04), radius: 8, y: 3)
     }
 
     func legendDot(_ c: Color, _ t: String) -> some View {

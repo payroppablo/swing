@@ -2,15 +2,18 @@ import SwiftUI
 import AVKit
 import AVFoundation
 
-// Vista previa del video elegido + recorte a un tramo (3–6 s) que cubra el swing.
+// Vista previa del video + recorte claro a un tramo (3–6 s) con tira de
+// miniaturas y rango resaltado (de dónde a dónde).
 struct PreviewTrimView: View {
     @EnvironmentObject var s: AppState
     @State private var player: AVPlayer?
     @State private var duration: Double = 0
     @State private var start: Double = 0
     @State private var len: Double = 4
+    @State private var thumbs: [UIImage] = []
 
-    var maxStart: Double { max(0, duration - len) }
+    var maxStart: Double { max(0.0001, duration - len) }
+    var end: Double { min(duration, start + len) }
 
     var body: some View {
         ZStack {
@@ -19,40 +22,67 @@ struct PreviewTrimView: View {
                 backRow { stopAndBack() }
                 Text("REVISA Y RECORTA").font(.system(size: 11, weight: .semibold)).tracking(3).foregroundColor(Theme.actionGreen)
                 Text("Recorta el swing").font(Theme.serif(28)).foregroundColor(Theme.ink)
-                Text("Deja un tramo corto que cubra desde el address hasta el finish. Mejor análisis y más rápido.")
-                    .font(.system(size: 13)).foregroundColor(Theme.slate)
+                Text("Deja un tramo que cubra del address al finish.").font(.system(size: 13)).foregroundColor(Theme.slate)
 
                 if let p = player {
-                    VideoPlayer(player: p).frame(height: 320).cornerRadius(14)
+                    VideoPlayer(player: p).frame(height: 300).cornerRadius(16)
+                        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
                 } else {
-                    RoundedRectangle(cornerRadius: 14).fill(Color.black).frame(height: 320)
+                    RoundedRectangle(cornerRadius: 16).fill(Color.black).frame(height: 300)
                         .overlay(ProgressView().tint(.white))
                 }
 
-                // Duración del tramo
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Duración del tramo: \(Int(len)) s").font(.system(size: 12.5, weight: .medium)).foregroundColor(Color(hex: 0x3C463F))
-                    Picker("", selection: $len) {
-                        ForEach([3.0, 4.0, 5.0, 6.0], id: \.self) { Text("\(Int($0))s").tag($0) }
+                // Tira de miniaturas con el tramo resaltado
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    ZStack(alignment: .leading) {
+                        HStack(spacing: 0) {
+                            if thumbs.isEmpty {
+                                Rectangle().fill(Color(hex: 0x0D241C))
+                            } else {
+                                ForEach(Array(thumbs.enumerated()), id: \.offset) { _, im in
+                                    Image(uiImage: im).resizable().scaledToFill()
+                                        .frame(width: w / CGFloat(thumbs.count), height: 56).clipped()
+                                }
+                            }
+                        }
+                        .frame(width: w, height: 56).clipShape(RoundedRectangle(cornerRadius: 10))
+                        // Oscurecer fuera del tramo
+                        if duration > 0 {
+                            let x0 = CGFloat(start / duration) * w
+                            let x1 = CGFloat(end / duration) * w
+                            Color.black.opacity(0.45).frame(width: max(0, x0), height: 56)
+                            Color.black.opacity(0.45).frame(width: max(0, w - x1), height: 56).offset(x: x1)
+                            // Marco del tramo seleccionado
+                            RoundedRectangle(cornerRadius: 8).stroke(Theme.actionGreen, lineWidth: 3)
+                                .frame(width: max(2, x1 - x0), height: 56).offset(x: x0)
+                        }
                     }
-                    .pickerStyle(.segmented)
-                    .onChange(of: len) { _ in start = min(start, maxStart); seek(start) }
+                }
+                .frame(height: 56)
+
+                // Etiquetas claras de inicio/fin
+                HStack {
+                    label("INICIO", String(format: "%.1f s", start))
+                    Spacer()
+                    Image(systemName: "arrow.right").foregroundColor(Color(hex: 0xB3BBB4))
+                    Spacer()
+                    label("FIN", String(format: "%.1f s", end))
+                    Spacer()
+                    label("DURA", "\(Int(len)) s")
                 }
 
-                // Inicio del tramo
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("Inicio").font(.system(size: 12.5, weight: .medium)).foregroundColor(Color(hex: 0x3C463F))
-                        Spacer()
-                        Text(String(format: "%.1fs → %.1fs", start, min(duration, start + len)))
-                            .font(Theme.mono(11)).foregroundColor(Theme.slate)
-                    }
-                    Slider(value: $start, in: 0...max(0.1, maxStart)) { editing in
-                        if !editing { previewSegment() }
-                    }
+                // Duración del tramo
+                Picker("", selection: $len) {
+                    ForEach([3.0, 4.0, 5.0, 6.0], id: \.self) { Text("\(Int($0))s").tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: len) { _ in start = min(start, maxStart); seek(start) }
+
+                // Mover el inicio
+                Slider(value: $start, in: 0...maxStart) { editing in if !editing { previewSegment() } }
                     .tint(Theme.actionGreen)
                     .onChange(of: start) { v in seek(v) }
-                }
 
                 Spacer()
 
@@ -60,16 +90,23 @@ struct PreviewTrimView: View {
                     Text("Analizar este tramo").font(.system(size: 16, weight: .bold))
                         .foregroundColor(Color(hex: 0x08311C)).frame(maxWidth: .infinity).padding(17)
                         .background(Theme.actionGreen).cornerRadius(15)
+                        .shadow(color: Theme.actionGreen.opacity(0.3), radius: 10, y: 5)
                 }
                 Button { stopAndBack() } label: {
                     Text("Elegir otro video").font(.system(size: 14, weight: .semibold))
                         .foregroundColor(Theme.darkGreen).frame(maxWidth: .infinity).padding(12)
-                        .background(Color(hex: 0xEAF6EC)).cornerRadius(12)
                 }
             }
             .padding(20).padding(.top, 20)
         }
         .task { await load() }
+    }
+
+    func label(_ tag: String, _ value: String) -> some View {
+        VStack(spacing: 1) {
+            Text(tag).font(.system(size: 8.5, weight: .bold)).tracking(1).foregroundColor(Color(hex: 0x9AA39C))
+            Text(value).font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundColor(Theme.darkGreen)
+        }
     }
 
     func load() async {
@@ -82,30 +119,31 @@ struct PreviewTrimView: View {
             start = 0
             let p = AVPlayer(url: url)
             player = p
-            seek(0)
-            p.play()
+            seek(0); p.play()
         }
+        // Generar ~10 miniaturas
+        let gen = AVAssetImageGenerator(asset: asset)
+        gen.appliesPreferredTrackTransform = true
+        gen.maximumSize = CGSize(width: 160, height: 160)
+        var imgs: [UIImage] = []
+        let n = 10
+        for i in 0..<n {
+            let t = d * (Double(i) + 0.5) / Double(n)
+            if let cg = try? gen.copyCGImage(at: CMTime(seconds: t, preferredTimescale: 600), actualTime: nil) {
+                imgs.append(UIImage(cgImage: cg))
+            }
+        }
+        await MainActor.run { thumbs = imgs }
     }
 
     func seek(_ t: Double) {
         player?.seek(to: CMTime(seconds: t, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     }
-
-    // Reproduce solo el tramo seleccionado una vez
-    func previewSegment() {
-        guard let p = player else { return }
-        seek(start); p.play()
-    }
-
+    func previewSegment() { guard let p = player else { return }; seek(start); p.play() }
     func confirm() {
         guard let url = s.pickedURL else { return }
         player?.pause()
         s.analyze(url: url, start: start, len: len)
     }
-
-    func stopAndBack() {
-        player?.pause()
-        player = nil
-        s.screen = .upload
-    }
+    func stopAndBack() { player?.pause(); player = nil; s.screen = .upload }
 }
