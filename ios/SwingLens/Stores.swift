@@ -95,7 +95,7 @@ extension SessionRecord {
 // Llama al backend (Cloudflare Worker) para el análisis de Birdie.
 // Pon aquí la URL de tu worker. Soporta Claude o Gemini según configures el worker.
 enum BirdieService {
-    static let proxyURL = ""   // ej. "https://swinglens-birdie.TUCUENTA.workers.dev"
+    static let proxyURL = "https://swinglens-birdie.payroppablo.workers.dev"   // Cloudflare Worker (Gemini)
 
     struct Block: Encodable {
         let type: String
