@@ -168,22 +168,45 @@ struct UploadView: View {
 // ── ANALYSIS ──
 struct AnalysisView: View {
     @EnvironmentObject var s: AppState
+    @State private var pulse = false
+    var statusText: String {
+        let p = s.progress
+        if p < 0.25 { return "Detectando postura y columna" }
+        if p < 0.5 { return "Siguiendo la trayectoria de manos" }
+        if p < 0.75 { return "Midiendo tempo y secuencia" }
+        if p < 0.95 { return "Comparando con el estándar de tour" }
+        return "Preparando tu reporte"
+    }
     var body: some View {
         ZStack {
             RadialGradient(colors: [Color(hex: 0x214D3A), Color(hex: 0x0D241C)],
-                           center: .center, startRadius: 10, endRadius: 500).ignoresSafeArea()
-            VStack(spacing: 22) {
-                Text("ANALYZING").font(.system(size: 11, weight: .semibold)).tracking(4).foregroundColor(Theme.lightGreen)
+                           center: .center, startRadius: 10, endRadius: 520).ignoresSafeArea()
+            VStack(spacing: 26) {
+                Text("ANALIZANDO").font(.system(size: 11, weight: .semibold)).tracking(5).foregroundColor(Theme.lightGreen)
                 ZStack {
-                    Circle().stroke(Color.white.opacity(0.12), lineWidth: 10).frame(width: 150, height: 150)
+                    // anillos de reticle
+                    Circle().stroke(Theme.lightGreen.opacity(0.10), lineWidth: 1).frame(width: 196, height: 196)
+                        .scaleEffect(pulse ? 1.06 : 0.97).opacity(pulse ? 0.2 : 0.6)
+                    Circle().stroke(Color.white.opacity(0.10), lineWidth: 10).frame(width: 150, height: 150)
                     Circle().trim(from: 0, to: s.progress)
-                        .stroke(Theme.lightGreen, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .stroke(LinearGradient(colors: [Theme.actionGreen, Theme.lightGreen], startPoint: .top, endPoint: .bottom),
+                                style: StrokeStyle(lineWidth: 10, lineCap: .round))
                         .frame(width: 150, height: 150).rotationEffect(.degrees(-90))
-                    Text("\(Int(s.progress*100))%").font(Theme.serif(34)).foregroundColor(.white)
+                        .shadow(color: Theme.lightGreen.opacity(0.5), radius: 8)
+                    VStack(spacing: 0) {
+                        Text("\(Int(s.progress*100))").font(Theme.serif(40)).foregroundColor(.white)
+                        Text("%").font(.system(size: 11)).foregroundColor(.white.opacity(0.6))
+                    }
                 }
-                Text("Analizando tu swing…").font(Theme.serif(22)).foregroundColor(.white)
+                VStack(spacing: 6) {
+                    Text("Analizando tu swing").font(Theme.serif(22)).foregroundColor(.white)
+                    Text(statusText).font(.system(size: 13)).foregroundColor(Color(hex: 0xCEE2D1))
+                        .id(statusText).transition(.opacity)
+                }
             }
         }
+        .onAppear { withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { pulse = true } }
+        .animation(.easeInOut(duration: 0.3), value: statusText)
     }
 }
 

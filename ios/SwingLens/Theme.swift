@@ -19,6 +19,15 @@ enum Theme {
     }
 }
 
+extension View {
+    // Tarjeta premium reutilizable (fondo, borde y sombra suave)
+    func swCard(_ radius: CGFloat = 18) -> some View {
+        self.background(Color.white).cornerRadius(radius)
+            .overlay(RoundedRectangle(cornerRadius: radius).stroke(Theme.cardBorder))
+            .shadow(color: .black.opacity(0.04), radius: 8, y: 3)
+    }
+}
+
 extension Color {
     init(hex: UInt, alpha: Double = 1) {
         self.init(

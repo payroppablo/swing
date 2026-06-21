@@ -474,7 +474,7 @@ struct ResultsView: View {
                 .font(.system(size: 12.5)).foregroundColor(retCol == Theme.amber ? Color(hex: 0x8A6B2E) : Theme.slate)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(16).background(Color.white).cornerRadius(18).overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.cardBorder))
+        .padding(16).swCard()
     }
 
     func stat(_ big: String, _ label: String, _ sub: String) -> some View {
@@ -494,8 +494,7 @@ struct ResultsView: View {
             row("Follow-through", r.followThrough, nil)
             row("Setup", r.setup, nil)
         }
-        .padding(.vertical, 4).background(Color.white).cornerRadius(14)
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.cardBorder))
+        .padding(.vertical, 4).swCard(14)
     }
     func row(_ name: String, _ score: Int, _ extra: String?) -> some View {
         HStack {
