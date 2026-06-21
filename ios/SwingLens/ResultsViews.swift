@@ -65,7 +65,8 @@ struct ResultsView: View {
                     }
                     tourCard(r)
                     if let seq = r.sequence { sequenceCard(seq) }
-                    if let shape = r.shape { planeCard(shape, club: r.club) }
+                    planePathCard(r)
+                    if let shape = r.shape { postureCard(shape) }
                     metricsCard(r)
                     coachContent(r)
                     birdieSection(r)
@@ -358,25 +359,76 @@ struct ResultsView: View {
         return PoseAnalyzer.angleDiff(ta, sa) - PoseAnalyzer.angleDiff(th, ha)
     }
 
-    func planeCard(_ shape: ShapeInfo, club: Club) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    // Forma del golpe + plano, con diagrama de TU trayectoria vs el plano ideal
+    func planePathCard(_ r: AnalysisResult) -> some View {
+        let paths = PoseAnalyzer.swingPaths(r.series, checkpoints: r.checkpoints)
+        let shape = r.shape
+        let hasPath = paths.back.count + paths.down.count > 2
+        let pathColor: Color = (shape?.pathDelta ?? 0) > 8 || (shape?.pathDelta ?? 0) < -8 ? Theme.amber : Theme.actionGreen
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("PLANO · PATH · POSTURA").font(.system(size: 11, weight: .semibold)).tracking(2).foregroundColor(Color(hex: 0x9AA39C))
+                Text("FORMA DEL GOLPE · PLANO").font(.system(size: 11, weight: .semibold)).tracking(2).foregroundColor(Color(hex: 0x9AA39C))
                 Spacer()
                 Text("ESTIMADO").font(.system(size: 9, weight: .bold)).foregroundColor(Color(hex: 0x9A8458))
                     .padding(.horizontal, 7).padding(.vertical, 2).background(Color(hex: 0xF5EFE0)).cornerRadius(99)
             }
-            if let label = shape.pathLabel {
-                Text(label).font(.system(size: 14.5, weight: .bold)).foregroundColor(Theme.ink)
-                Text("\(shape.shape ?? "") — \(shape.shapeNote ?? "")").font(.system(size: 12.5)).foregroundColor(Theme.slate)
+            if let label = shape?.pathLabel {
+                Text(label).font(.system(size: 16, weight: .bold)).foregroundColor(pathColor)
+                Text("\(shape?.shape ?? "") — \(shape?.shapeNote ?? "")").font(.system(size: 12.5)).foregroundColor(Theme.slate)
+            }
+            // Diagrama
+            ZStack {
+                RoundedRectangle(cornerRadius: 12).fill(Color(hex: 0x0D241C))
+                if hasPath {
+                    PlaneDiagram(back: paths.back, down: paths.down,
+                                 idealAngle: Double(r.club.planeLo + r.club.planeHi) / 2)
+                        .padding(8)
+                } else {
+                    Text("No se pudo leer la trayectoria de manos en este swing.")
+                        .font(.system(size: 12)).foregroundColor(.white.opacity(0.6)).multilineTextAlignment(.center).padding()
+                }
+            }
+            .frame(height: 180)
+            // Leyenda
+            HStack(spacing: 14) {
+                legendDot(Theme.lightGreen, "Backswing")
+                legendDot(Theme.amber, "Bajada")
+                HStack(spacing: 5) {
+                    Rectangle().fill(Color.white.opacity(0.7)).frame(width: 14, height: 2)
+                    Text("Plano ideal").font(.system(size: 10.5)).foregroundColor(Theme.slate)
+                }
             }
             HStack(spacing: 10) {
-                stat("\(shape.planeAngle.map { "\($0)°" } ?? "—")", "Plano manos", "ideal \(club.planeLo)–\(club.planeHi)°")
-                stat(shape.spineRet.map { "±\(Int($0.rounded()))°" } ?? "—", "Postura", "address→impacto")
-                stat(shape.spineAddr.map { "\(Int($0.rounded()))°" } ?? "—", "Spine address", "inclinación")
+                stat(shape?.planeAngle.map { "\($0)°" } ?? "—", "Tu plano", "ideal \(r.club.planeLo)–\(r.club.planeHi)°")
+                stat("\(r.tempoRatio)", "Tempo", "ideal 3.0:1")
             }
-            Text("Nota: Vision no ve el palo. El plano se estima de las manos; la forma es tendencia.")
+            Text("Vision no ve el palo: la trayectoria se estima de las manos y la forma es tendencia (no mide la cara del palo).")
                 .font(.system(size: 10.5)).foregroundColor(Color(hex: 0x9AA39C))
+        }
+        .padding(16).background(Color.white).cornerRadius(18).overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.cardBorder))
+    }
+
+    func legendDot(_ c: Color, _ t: String) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(c).frame(width: 9, height: 9)
+            Text(t).font(.system(size: 10.5)).foregroundColor(Theme.slate)
+        }
+    }
+
+    // Postura (spine) como tarjeta aparte
+    func postureCard(_ shape: ShapeInfo) -> some View {
+        let retCol = (shape.spineRet ?? 0) > 12 ? Theme.amber : Theme.actionGreen
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("POSTURA (SPINE ANGLE)").font(.system(size: 11, weight: .semibold)).tracking(2).foregroundColor(Color(hex: 0x9AA39C))
+            HStack(spacing: 10) {
+                stat(shape.spineAddr.map { "\(Int($0.rounded()))°" } ?? "—", "Address", "inclinación")
+                stat(shape.spineRet.map { "±\(Int($0.rounded()))°" } ?? "—", "Cambio", "address→impacto")
+            }
+            Text((shape.spineRet ?? 0) > 12
+                 ? "Pierdes postura entre el address y el impacto (early extension). Mantén el ángulo de columna para contacto y consistencia."
+                 : "Buena retención de postura: mantienes el ángulo de columna del address al impacto.")
+                .font(.system(size: 12.5)).foregroundColor(retCol == Theme.amber ? Color(hex: 0x8A6B2E) : Theme.slate)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16).background(Color.white).cornerRadius(18).overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.cardBorder))
     }
@@ -712,5 +764,57 @@ struct ScrubView: View {
             return UIImage(cgImage: ov)
         }.value
         if let ui = ui { preview = ui }
+    }
+}
+
+// Diagrama: trayectoria real de manos (backswing verde + bajada ámbar) vs la
+// línea de plano ideal (punteada) que deberías seguir aproximadamente.
+struct PlaneDiagram: View {
+    let back: [CGPoint]
+    let down: [CGPoint]
+    let idealAngle: Double
+
+    var body: some View {
+        Canvas { ctx, size in
+            let all = back + down
+            guard all.count > 1 else { return }
+            let xs = all.map { $0.x }, ys = all.map { $0.y }
+            let minX = xs.min()!, maxX = xs.max()!, minY = ys.min()!, maxY = ys.max()!
+            let bw = max(1, maxX - minX), bh = max(1, maxY - minY)
+            let pad: CGFloat = 18
+            let sc = min((size.width - 2*pad) / bw, (size.height - 2*pad) / bh)
+            let offX = (size.width - bw * sc) / 2
+            let offY = (size.height - bh * sc) / 2
+            func map(_ p: CGPoint) -> CGPoint { CGPoint(x: offX + (p.x - minX) * sc, y: offY + (p.y - minY) * sc) }
+
+            func strokePts(_ pts: [CGPoint], _ color: Color, _ w: CGFloat) {
+                guard pts.count > 1 else { return }
+                var path = Path(); path.move(to: map(pts[0]))
+                for p in pts.dropFirst() { path.addLine(to: map(p)) }
+                ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round))
+            }
+
+            // Línea de plano ideal (punteada) a través del punto de address
+            if let a = back.first ?? down.first {
+                let c = map(a)
+                let rad = idealAngle * .pi / 180
+                let L = max(size.width, size.height)
+                let dx = cos(rad) * L, dy = -sin(rad) * L
+                var ip = Path()
+                ip.move(to: CGPoint(x: c.x - dx, y: c.y - dy))
+                ip.addLine(to: CGPoint(x: c.x + dx, y: c.y + dy))
+                ctx.stroke(ip, with: .color(.white.opacity(0.65)), style: StrokeStyle(lineWidth: 2, dash: [6, 5]))
+            }
+
+            // Trayectoria real
+            strokePts(back, Color(hex: 0x7FD08A), 3)
+            strokePts(down, Color(hex: 0xF5A03A), 3.5)
+
+            // Marcadores address/impacto
+            if let a = back.first ?? down.first {
+                let p = map(a)
+                ctx.fill(Path(ellipseIn: CGRect(x: p.x-4, y: p.y-4, width: 8, height: 8)), with: .color(.white))
+            }
+        }
     }
 }
