@@ -11,7 +11,7 @@ struct SwingLensApp: App {
     }
 }
 
-enum Screen { case home, upload, analysis, results, progress, drills }
+enum Screen { case home, upload, preview, analysis, results, progress, drills }
 
 @MainActor
 final class AppState: ObservableObject {
@@ -23,14 +23,21 @@ final class AppState: ObservableObject {
     @Published var birdieText: String = ""
     @Published var birdieLoading = false
     @Published var resultsFrom: Screen = .upload   // a dónde vuelve el botón atrás
+    @Published var pickedURL: URL?                 // video elegido (para previsualizar/recortar)
     let history = HistoryStore()
 
-    func analyze(url: URL) {
+    // Tras elegir video -> pantalla de vista previa y recorte
+    func preparePreview(_ url: URL) {
+        pickedURL = url
+        screen = .preview
+    }
+
+    func analyze(url: URL, start: Double = 0, len: Double = 10) {
         screen = .analysis
         progress = 0
         let club = self.club, angle = self.angle
         Task.detached(priority: .userInitiated) {
-            let res = await PoseAnalyzer.analyze(url: url, club: club, angle: angle) { p in
+            let res = await PoseAnalyzer.analyze(url: url, club: club, angle: angle, start: start, len: len) { p in
                 Task { @MainActor in self.progress = p }
             }
             await MainActor.run {

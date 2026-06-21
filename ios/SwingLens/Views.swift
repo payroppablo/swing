@@ -11,6 +11,7 @@ struct RootView: View {
             switch s.screen {
             case .home:     HomeView()
             case .upload:   UploadView()
+            case .preview:  PreviewTrimView()
             case .analysis: AnalysisView()
             case .results:  ResultsView()
             case .progress: ProgressScreen()
@@ -119,7 +120,7 @@ struct UploadView: View {
             guard let item = item else { return }
             Task {
                 if let movie = try? await item.loadTransferable(type: Movie.self) {
-                    await MainActor.run { s.analyze(url: movie.url) }
+                    await MainActor.run { s.preparePreview(movie.url) }
                 }
             }
         }

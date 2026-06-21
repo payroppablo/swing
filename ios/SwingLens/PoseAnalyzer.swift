@@ -20,13 +20,17 @@ struct PoseAnalyzer {
     ]
 
     static func analyze(url: URL, club: Club, angle: CameraAngle,
+                        start: Double = 0, len: Double = 10,
                         progress: @escaping (Double) -> Void) async -> AnalysisResult? {
         let asset = AVURLAsset(url: url)
         guard let track = try? await asset.loadTracks(withMediaType: .video).first,
               let durationTime = try? await asset.load(.duration) else { return nil }
         let size = (try? await track.load(.naturalSize)) ?? CGSize(width: 720, height: 1280)
         let vw = abs(size.width), vh = abs(size.height)
-        let duration = min(CMTimeGetSeconds(durationTime), 10)
+        let fullDur = CMTimeGetSeconds(durationTime)
+        let startT = max(0, min(start, max(0, fullDur - 0.5)))
+        let endT = min(fullDur, startT + max(1, len))
+        let duration = endT - startT
         if duration <= 0 { return nil }
 
         let gen = AVAssetImageGenerator(asset: asset)
@@ -41,8 +45,8 @@ struct PoseAnalyzer {
         var prevHip: Double? = nil
 
         let request = VNDetectHumanBodyPoseRequest()
-        var t = 0.0
-        while t <= duration {
+        var t = startT
+        while t <= endT {
             let cmt = CMTime(seconds: t, preferredTimescale: 600)
             guard let cg = try? gen.copyCGImage(at: cmt, actualTime: nil) else { t += step; continue }
             let handler = VNImageRequestHandler(cgImage: cg, options: [:])
@@ -70,7 +74,7 @@ struct PoseAnalyzer {
 
             series.append(FrameSample(t: t, points: pts, scores: scs,
                                       shoulderAngle: sa, hipAngle: ha, spineTilt: sp, image: nil))
-            progress(min(0.95, t / duration))
+            progress(min(0.95, (t - startT) / duration))
             t += step
         }
 
