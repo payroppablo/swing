@@ -5,22 +5,38 @@ Milestone 1: flujo completo nativo — elegir video → análisis de pose con
 progreso + Birdie (vía el Cloudflare Worker). La extracción de frames usa
 `AVAssetImageGenerator` (exacta en iOS, sin el problema de seek de Safari).
 
-## Abrir en Xcode
+## Abrir el proyecto (ya armado) — RECOMENDADO
 
-1. Xcode → **File → New → Project → iOS → App**.
-   - Product Name: `SwingLens`
-   - Interface: **SwiftUI**, Language: **Swift**
-   - Minimum Deployments: **iOS 16.0** o superior.
-2. Borra el `ContentView.swift` y el `SwingLensApp.swift` que crea Xcode.
-3. Arrastra a tu proyecto TODOS los archivos de esta carpeta `ios/SwingLens/`:
-   - `SwingLensApp.swift`, `Theme.swift`, `Models.swift`, `PoseAnalyzer.swift`,
-     `Stores.swift`, `Views.swift`, `ResultsViews.swift`
-   - Marca **Copy items if needed** y tu target.
-4. En **Signing & Capabilities** elige tu equipo (Apple ID gratis sirve para
-   probar en tu iPhone).
-5. (Opcional) Info → añade `NSPhotoLibraryUsageDescription` = "Para analizar
-   tus videos de swing." (PhotosPicker normalmente no lo exige, pero es buena
-   práctica.)
+Requiere **Xcode 16 o 17** (usa carpetas sincronizadas).
+
+1. **Clona o baja el repo** en tu Mac.
+   - Terminal: `git clone https://github.com/payroppablo/swing.git`
+   - (o Code → Download ZIP y descomprime)
+2. Abre **`ios/SwingLens.xcodeproj`** (doble clic).
+3. **Agrega tu cuenta de Apple (una sola vez):**
+   - Menú **Xcode → Settings…** (`Cmd + ,`) → pestaña **Accounts** → botón **+** →
+     **Apple ID** → inicia sesión con tu Apple ID (la cuenta gratis sirve).
+   - Esto crea tu "Personal Team".
+4. **Firma la app:**
+   - En el navegador izquierdo, clic en el ícono azul **SwingLens** (arriba).
+   - Selecciona el target **SwingLens** → pestaña **Signing & Capabilities**.
+   - Marca **Automatically manage signing**.
+   - En **Team** elige tu nombre (Personal Team).
+   - Si sale error de **Bundle Identifier** ("not available"), cambia
+     `com.payroppablo.swinglens` por algo único, ej. `com.tunombre.swinglens1`.
+5. **Corre:** arriba elige un **iPhone 16/17 (Simulator)** o tu iPhone real → ▶︎.
+   - En iPhone real, primera vez: **Ajustes → General → VPN y gestión de
+     dispositivos** → toca tu perfil → **Confiar**.
+
+### Actualizar a futuro
+Solo `git pull` (o baja el ZIP de nuevo). Como el proyecto usa carpetas
+sincronizadas, **los archivos cambiados se toman solos** — no reemplazas nada a
+mano. Cierra y reabre Xcode si no los ve al instante.
+
+## (Alternativa) Crear el proyecto a mano
+Solo si tu Xcode es viejo (<16): File → New → Project → iOS App (SwiftUI,
+iOS 16+), borra `ContentView.swift`/`<Nombre>App.swift`, y arrastra los 7
+`.swift` de `ios/SwingLens/` + `Assets.xcassets`.
 
 ## Activar Birdie (caddie AI)
 
