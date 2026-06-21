@@ -690,8 +690,16 @@ struct ProgressScreen: View {
                             .padding(12).background(Color.white).cornerRadius(14)
                             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.cardBorder))
                         }
+                        .contextMenu {
+                            Button(role: .destructive) { s.deleteSession(rec.id) } label: {
+                                Label("Eliminar sesión", systemImage: "trash")
+                            }
+                        }
                     }
                 }
+                Text("Mantén presionada una sesión para eliminarla.")
+                    .font(.system(size: 11)).foregroundColor(Color(hex: 0xB3BBB4))
+                    .frame(maxWidth: .infinity, alignment: .center).padding(.top, 4)
             }.padding(20).padding(.top, 30)
         }.background(Theme.cream.ignoresSafeArea())
     }

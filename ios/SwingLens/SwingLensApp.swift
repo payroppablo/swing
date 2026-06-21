@@ -64,6 +64,12 @@ final class AppState: ObservableObject {
         if let id = r.recordID { history.updateClub(id, c) }
     }
 
+    // Borrar una sesión del historial
+    func deleteSession(_ id: UUID) {
+        history.delete(id)
+        objectWillChange.send()   // refresca la pantalla de progreso
+    }
+
     // Reabrir un reporte guardado desde Progreso
     func openSession(_ rec: SessionRecord) {
         result = rec.toResult()

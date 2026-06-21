@@ -25,12 +25,23 @@ struct RootView: View {
 // ── HOME ──
 struct HomeView: View {
     @EnvironmentObject var s: AppState
+    @AppStorage("swinglens_name") private var userName = ""
+    @State private var showNameEntry = false
+    @State private var nameInput = ""
     var body: some View {
         ZStack {
             LinearGradient(colors: [Theme.darkGreen, Color(hex: 0x0D241C)],
                            startPoint: .top, endPoint: .bottom).ignoresSafeArea()
             VStack(alignment: .leading, spacing: 16) {
                 Spacer()
+                // Saludo personalizado (toca para editar tu nombre)
+                Button { nameInput = userName; showNameEntry = true } label: {
+                    HStack(spacing: 6) {
+                        Text(userName.isEmpty ? "Bienvenido 👋" : "Hola, \(userName) 👋")
+                            .font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.lightGreen)
+                        Image(systemName: "pencil").font(.system(size: 10)).foregroundColor(Theme.lightGreen.opacity(0.7))
+                    }
+                }
                 Text("SwingLens Golf")
                     .font(Theme.serif(40)).foregroundColor(.white)
 
@@ -45,7 +56,9 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("BIRDIE · TU CADDIE")
                             .font(.system(size: 10, weight: .bold)).tracking(1.5).foregroundColor(Theme.lightGreen)
-                        Text("\"Listo cuando quieras — mándame un swing y te leo cada detalle.\"")
+                        Text(userName.isEmpty
+                             ? "\"Listo cuando quieras — mándame un swing y te leo cada detalle.\""
+                             : "\"Vamos, \(userName) — mándame un swing y te leo cada detalle.\"")
                             .font(.system(size: 14, design: .serif)).italic().foregroundColor(Color(hex: 0xEAF3EB))
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -66,6 +79,13 @@ struct HomeView: View {
                 Spacer().frame(height: 12)
             }
             .padding(28)
+        }
+        .alert("¿Cómo te llamas?", isPresented: $showNameEntry) {
+            TextField("Tu nombre", text: $nameInput)
+            Button("Guardar") { userName = nameInput.trimmingCharacters(in: .whitespaces) }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Birdie te saludará por tu nombre.")
         }
     }
     func menuButton(_ title: String, subtitle: String, bg: Color, fg: Color, _ action: @escaping () -> Void) -> some View {
