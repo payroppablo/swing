@@ -224,35 +224,78 @@ struct ResultsView: View {
     func tourCard(_ r: AnalysisResult) -> some View {
         let m = tourMatch(r)
         let col = m.overall >= 75 ? Theme.actionGreen : (m.overall >= 55 ? Theme.amber : Color(hex: 0xC2843B))
+        let yourImg = r.checkpoints.flatMap { r.series[$0.impact].image }
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("PARECIDO A UN SWING DE TOUR").font(.system(size: 11, weight: .semibold)).tracking(1.5).foregroundColor(Color(hex: 0x9AA39C))
+                Text("TÚ vs TOUR").font(.system(size: 11, weight: .semibold)).tracking(2).foregroundColor(Color(hex: 0x9AA39C))
                 Spacer()
                 Text("\(r.club.label)").font(.system(size: 10, weight: .bold)).foregroundColor(Theme.darkGreen)
+                    .padding(.horizontal, 8).padding(.vertical, 2).background(Color(hex: 0xEAF6EC)).cornerRadius(99)
             }
+
+            // Paneles lado a lado: TÚ vs TOUR
+            HStack(spacing: 10) {
+                // TÚ
+                VStack(spacing: 6) {
+                    ZStack {
+                        if let cg = yourImg {
+                            Image(uiImage: UIImage(cgImage: cg)).resizable().scaledToFill()
+                        } else {
+                            Rectangle().fill(Color(hex: 0x0D241C))
+                        }
+                    }
+                    .frame(height: 150).frame(maxWidth: .infinity).clipped().cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.actionGreen, lineWidth: 2))
+                    .overlay(alignment: .topLeading) {
+                        Text("TÚ").font(.system(size: 10, weight: .bold)).foregroundColor(.white)
+                            .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.actionGreen).cornerRadius(8).padding(6)
+                    }
+                    Text("Impacto").font(.system(size: 10)).foregroundColor(Theme.slate)
+                }
+                // TOUR (referencia ideal)
+                VStack(spacing: 6) {
+                    ZStack {
+                        LinearGradient(colors: [Theme.darkGreen, Color(hex: 0x0D241C)], startPoint: .top, endPoint: .bottom)
+                        VStack(spacing: 8) {
+                            Image(systemName: "figure.golf").font(.system(size: 40)).foregroundColor(Theme.lightGreen)
+                            Text("Estándar de tour").font(.system(size: 10)).foregroundColor(.white.opacity(0.75))
+                        }
+                    }
+                    .frame(height: 150).frame(maxWidth: .infinity).clipped().cornerRadius(12)
+                    .overlay(alignment: .topLeading) {
+                        Text("TOUR").font(.system(size: 10, weight: .bold)).foregroundColor(Color(hex: 0x08311C))
+                            .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.lightGreen).cornerRadius(8).padding(6)
+                    }
+                    Text("Referencia").font(.system(size: 10)).foregroundColor(Theme.slate)
+                }
+            }
+
+            // Match global
             HStack(spacing: 14) {
                 ZStack {
-                    Circle().stroke(Color(hex: 0xEAEDE5), lineWidth: 9).frame(width: 78, height: 78)
+                    Circle().stroke(Color(hex: 0xEAEDE5), lineWidth: 9).frame(width: 72, height: 72)
                     Circle().trim(from: 0, to: CGFloat(m.overall) / 100)
                         .stroke(col, style: StrokeStyle(lineWidth: 9, lineCap: .round))
-                        .frame(width: 78, height: 78).rotationEffect(.degrees(-90))
+                        .frame(width: 72, height: 72).rotationEffect(.degrees(-90))
                     VStack(spacing: -2) {
-                        Text("\(m.overall)").font(Theme.serif(26)).foregroundColor(Theme.ink)
-                        Text("%").font(.system(size: 10)).foregroundColor(Theme.slate)
+                        Text("\(m.overall)").font(Theme.serif(24)).foregroundColor(Theme.ink)
+                        Text("%").font(.system(size: 9)).foregroundColor(Theme.slate)
                     }
                 }
-                Text(m.overall >= 75 ? "Muy cerca de un swing de tour. Pule los detalles de abajo."
+                Text(m.overall >= 75 ? "Muy cerca de un swing de tour. Pule los detalles."
                      : m.overall >= 55 ? "Buen camino. Hay 2-3 cosas que te separan del nivel tour."
                      : "Tienes margen claro. Enfócate en lo rojo de abajo y verás saltos rápidos.")
                     .font(.system(size: 13)).foregroundColor(Theme.slate).fixedSize(horizontal: false, vertical: true)
             }
+
+            // Barras por métrica (tú vs tour)
             VStack(spacing: 9) {
                 ForEach(m.rows) { row in
                     VStack(spacing: 4) {
                         HStack {
                             Text(row.name).font(.system(size: 12.5, weight: .medium)).foregroundColor(Color(hex: 0x3C463F))
                             Spacer()
-                            Text("tú \(row.your)").font(.system(size: 11)).foregroundColor(Theme.slate)
+                            Text("tú \(row.your)").font(.system(size: 11, weight: .semibold)).foregroundColor(Theme.darkGreen)
                             Text("· tour \(row.ideal)").font(.system(size: 11)).foregroundColor(Color(hex: 0xB3BBB4))
                         }
                         GeometryReader { g in
